@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Dual Eye Control</title>
+  <title>Fresher Bot - Dance & Reverse Edition</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -20,32 +20,32 @@
     .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
     .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
     .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
-    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
+    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 38vw; z-index: 10; }
     #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
-    .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
-    button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
+    #voiceStatus { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
+    .btn-group { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 170px; }
+    button { padding: 7px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
     video { display: none; }
   </style>
 </head>
 <body>
 
-  <!-- LEFT EYE -->
   <div class="eye-container">
     <div id="leftBrow" class="eyebrow"></div>
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- CENTER CONTROL PANEL -->
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
+    <div id="voiceStatus">Mic: Off</div>
     <div class="btn-group">
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
+      <button onclick="startVoiceRecognition()" id="micBtn">Enable Voice 🎤</button>
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
       <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
     </div>
   </div>
 
-  <!-- RIGHT EYE -->
   <div class="eye-container">
     <div id="rightBrow" class="eyebrow"></div>
     <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
@@ -58,10 +58,10 @@
     let currentMode = 'GESTURE';
     let lastCmd = '';
     let isDancing = false;
-    let isGreeting = false;
-    let greetingCooldown = false;
+    let voiceOverrideStop = false;
 
     const overlayText = document.getElementById('overlayText');
+    const voiceStatus = document.getElementById('voiceStatus');
     const leftEye = document.getElementById('leftEye');
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
@@ -77,7 +77,7 @@
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
         overlayText.innerText = "Status: Connected!";
-        speakGreeting("Connected to rover!");
+        speak("Connected!");
       } catch (e) {
         console.log(e);
         overlayText.innerText = "Connection Failed";
@@ -85,7 +85,7 @@
     }
 
     function sendCommand(cmd) {
-      if (isDancing || isGreeting) return;
+      if (isDancing) return;
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
           let encoder = new TextEncoder();
@@ -104,47 +104,19 @@
       setExpression(cmd);
     }
 
-    function speakGreeting(messageText) {
+    function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        const msg = new SpeechSynthesisUtterance(messageText);
-        msg.rate = 1.0;
-        msg.pitch = 1.1;
-        window.speechSynthesis.speak(msg);
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
       }
-    }
-
-    function executeGreetingRoutine() {
-      isGreeting = true;
-      greetingCooldown = true;
-      overlayText.innerText = "Greeting Visitor!";
-      
-      // Step forward, step back, halt, then play greeting audio
-      sendDirectCommand('F');
-      
-      setTimeout(() => {
-        sendDirectCommand('B');
-        setTimeout(() => {
-          sendDirectCommand('S');
-          speakGreeting("Welcome to Fresher's Day! Glad to see you here!");
-          
-          setTimeout(() => {
-            isGreeting = false;
-            overlayText.innerText = "Mode: " + (currentMode === 'GESTURE' ? "Gesture" : "Follower");
-          }, 2500);
-
-          // Cooldown for 8 seconds before triggering another greeting
-          setTimeout(() => {
-            greetingCooldown = false;
-          }, 8000);
-        }, 400);
-      }, 400);
     }
 
     function triggerDance() {
       isDancing = true;
       overlayText.innerText = "PARTY TIME! 💃";
-      speakGreeting("Let's dance freshers!");
+      speak("Let's dance freshers!");
       
       let moves = ['L', 'R', 'L', 'R', 'B', 'F', 'S'];
       let i = 0;
@@ -160,17 +132,62 @@
       }, 600);
     }
 
+    function startVoiceRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return alert("Speech API not supported.");
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        voiceStatus.innerText = "Mic: Listening...";
+        document.getElementById('micBtn').style.backgroundColor = "#ff0077";
+      };
+
+      recognition.onresult = (event) => {
+        const lastIndex = event.results.length - 1;
+        const text = event.results[lastIndex][0].transcript.toLowerCase().trim();
+        voiceStatus.innerText = `Heard: "${text}"`;
+
+        if (text.includes("stop") || text.includes("wait")) {
+          voiceOverrideStop = true;
+          sendCommand('S');
+          setTimeout(() => { voiceOverrideStop = false; }, 3000);
+        } else if (text.includes("forward") || text.includes("go")) {
+          voiceOverrideStop = false;
+          sendCommand('F');
+        } else if (text.includes("back") || text.includes("reverse")) {
+          voiceOverrideStop = false;
+          sendCommand('B');
+        } else if (text.includes("left")) {
+          voiceOverrideStop = false;
+          sendCommand('L');
+        } else if (text.includes("right")) {
+          voiceOverrideStop = false;
+          sendCommand('R');
+        } else if (text.includes("dance") || text.includes("party")) {
+          triggerDance();
+        } else if (text.includes("follow")) {
+          voiceOverrideStop = false;
+          currentMode = 'FOLLOWER';
+          document.getElementById('modeBtn').innerText = "Mode: Follower";
+        }
+      };
+
+      recognition.onend = () => { recognition.start(); };
+      recognition.start();
+    }
+
     function toggleMode() {
+      voiceOverrideStop = false;
       if (currentMode === 'GESTURE') {
         currentMode = 'FOLLOWER';
         document.getElementById('modeBtn').innerText = "Mode: Follower";
-        overlayText.innerText = "Mode: Follower";
       } else {
         currentMode = 'GESTURE';
         document.getElementById('modeBtn').innerText = "Mode: Gesture";
-        overlayText.innerText = "Mode: Gesture";
       }
-      sendCommand('S');
     }
 
     function setExpression(cmd) {
@@ -202,8 +219,7 @@
     const videoElement = document.getElementById('webcam');
 
     function onHandResults(results) {
-      if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
-
+      if (currentMode !== 'GESTURE' || isDancing || voiceOverrideStop) return;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
@@ -223,25 +239,15 @@
     }
 
     function onFaceResults(results) {
-      if (isDancing) return;
-
+      if (currentMode !== 'FOLLOWER' || isDancing || voiceOverrideStop) return;
       if (results.detections && results.detections.length > 0) {
         const detection = results.detections[0];
         const faceCenterX = 1.0 - detection.boundingBox.xCenter;
 
-        // Visitor Greeting sequence when a face appears in Gesture Mode
-        if (currentMode === 'GESTURE' && !greetingCooldown && !isGreeting) {
-          executeGreetingRoutine();
-          return;
-        }
-
-        // Follower logic when in FOLLOWER mode
-        if (currentMode === 'FOLLOWER' && !isGreeting) {
-          if (faceCenterX < 0.38) sendCommand('L');
-          else if (faceCenterX > 0.62) sendCommand('R');
-          else sendCommand('F');
-        }
-      } else if (currentMode === 'FOLLOWER' && !isGreeting) {
+        if (faceCenterX < 0.40) sendCommand('L');
+        else if (faceCenterX > 0.60) sendCommand('R');
+        else sendCommand('F');
+      } else {
         sendCommand('S');
       }
     }
@@ -254,15 +260,10 @@
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Frame processor running continuously without breaking state transitions
     const camera = new Camera(videoElement, {
       onFrame: async () => {
-        if (currentMode === 'GESTURE') {
-          await faceDetection.send({ image: videoElement });
-          await hands.send({ image: videoElement });
-        } else if (currentMode === 'FOLLOWER') {
-          await faceDetection.send({ image: videoElement });
-        }
+        if (currentMode === 'GESTURE') await hands.send({ image: videoElement });
+        if (currentMode === 'FOLLOWER') await faceDetection.send({ image: videoElement });
       },
       width: 640, height: 480
     });
