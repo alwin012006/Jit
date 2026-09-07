@@ -22,19 +22,19 @@
     #webcam {
       width: 100vw; height: 100dvh;
       object-fit: cover;
-      transform: scaleX(-1); /* Mirror camera feed for natural controls */
+      transform: scaleX(-1);
       position: absolute; top: 0; left: 0; z-index: 1;
     }
 
     /* Diagnostics Data Overlay (Left Side) */
     #diagnosticPanel {
       position: absolute; top: 12px; left: 12px; z-index: 10;
-      background: rgba(5, 5, 8, 0.82);
+      background: rgba(5, 5, 8, 0.85);
       border: 1px solid #00f0ff; border-radius: 10px;
       padding: 10px 14px; color: #00f0ff;
       font-size: 11px; line-height: 1.5;
       box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
-      max-width: 220px;
+      max-width: 230px;
     }
 
     .diag-title { font-weight: bold; font-size: 12px; color: #fff; margin-bottom: 4px; text-transform: uppercase; }
@@ -197,20 +197,28 @@
       sendCommand('S');
     }
 
-    // HAND GESTURE CALLBACK
+    // Distance metric helper for finger extension calculation
+    function getDistance(p1, p2) {
+      return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    }
+
+    // ROBUST HAND GESTURE CALLBACK
     function onHandResults(results) {
       if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
 
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
+        const lm = results.multiHandLandmarks[0];
+        const wrist = lm[0];
         let openFingers = 0;
-        
-        if (landmarks[8].y < landmarks[6].y) openFingers++;
-        if (landmarks[12].y < landmarks[10].y) openFingers++;
-        if (landmarks[16].y < landmarks[14].y) openFingers++;
-        if (landmarks[20].y < landmarks[18].y) openFingers++;
+
+        // Euclidean distance comparison between fingertip-to-wrist vs joint-to-wrist
+        if (getDistance(lm[8], wrist) > getDistance(lm[6], wrist)) openFingers++;  // Index
+        if (getDistance(lm[12], wrist) > getDistance(lm[10], wrist)) openFingers++; // Middle
+        if (getDistance(lm[16], wrist) > getDistance(lm[14], wrist)) openFingers++; // Ring
+        if (getDistance(lm[20], wrist) > getDistance(lm[18], wrist)) openFingers++; // Pinky
 
         handStatus.innerText = openFingers + " Fingers";
+        handStatus.style.color = "#00ff66";
 
         if (openFingers >= 4) sendCommand('F');
         else if (openFingers === 3) sendCommand('B');
@@ -219,6 +227,7 @@
         else sendCommand('S');
       } else {
         handStatus.innerText = "No Hand Detected";
+        handStatus.style.color = "#ff0077";
         sendCommand('S');
       }
     }
@@ -232,6 +241,7 @@
         const faceCenterX = 1.0 - detection.boundingBox.xCenter;
 
         faceStatus.innerText = "Detected";
+        faceStatus.style.color = "#00ff66";
 
         if (currentMode === 'GESTURE' && !greetingCooldown && !isGreeting) {
           executeGreetingRoutine();
@@ -245,19 +255,20 @@
         }
       } else {
         faceStatus.innerText = "No Face Detected";
+        faceStatus.style.color = "#ff0077";
         if (currentMode === 'FOLLOWER' && !isGreeting) {
           sendCommand('S');
         }
       }
     }
 
-    // Initialize MediaPipe Models
+    // Initialize MediaPipe Models with optimized confidence & complexity thresholds
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.3, minTrackingConfidence: 0.3 });
     hands.onResults(onHandResults);
 
     const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
-    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
+    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.3 });
     faceDetection.onResults(onFaceResults);
 
     // Direct Native Camera Access
