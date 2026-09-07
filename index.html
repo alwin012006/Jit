@@ -67,7 +67,7 @@
     <div>Command: <span id="cmdStatus" class="diag-val">STOP (S)</span></div>
     <div>Hand Data: <span id="handStatus" class="diag-val">Searching...</span></div>
     <div>Face Data: <span id="faceStatus" class="diag-val">Searching...</span></div>
-    <div>Loop State: <span id="loopStatus" class="diag-val">Active</span></div>
+    <div>Loop State: <span id="loopStatus" class="diag-val">Initializing...</span></div>
   </div>
 
   <!-- CONTROL BUTTONS -->
@@ -84,7 +84,6 @@
     let isDancing = false;
     let isGreeting = false;
     let greetingCooldown = false;
-    let isProcessingFrame = false;
 
     const bleStatus = document.getElementById('bleStatus');
     const modeStatus = document.getElementById('modeStatus');
@@ -197,12 +196,12 @@
       sendCommand('S');
     }
 
-    // Distance metric helper for finger extension calculation
+    // Distance calculation for finger extension
     function getDistance(p1, p2) {
       return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
     }
 
-    // ROBUST HAND GESTURE CALLBACK
+    // HAND GESTURE CALLBACK
     function onHandResults(results) {
       if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
 
@@ -211,7 +210,6 @@
         const wrist = lm[0];
         let openFingers = 0;
 
-        // Euclidean distance comparison between fingertip-to-wrist vs joint-to-wrist
         if (getDistance(lm[8], wrist) > getDistance(lm[6], wrist)) openFingers++;  // Index
         if (getDistance(lm[12], wrist) > getDistance(lm[10], wrist)) openFingers++; // Middle
         if (getDistance(lm[16], wrist) > getDistance(lm[14], wrist)) openFingers++; // Ring
@@ -262,55 +260,39 @@
       }
     }
 
-    // Initialize MediaPipe Models with optimized confidence & complexity thresholds
-    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    // Initialize MediaPipe Models
+    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
     hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.3, minTrackingConfidence: 0.3 });
     hands.onResults(onHandResults);
 
-    const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
+    const faceDetection = new FaceDetection({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}` });
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.3 });
     faceDetection.onResults(onFaceResults);
 
-    // Direct Native Camera Access
-    async function startCameraDirectly() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false
-        });
-        videoElement.srcObject = stream;
-        await videoElement.play();
-
-        async function processFrame() {
-          if (videoElement.readyState === 4 && !isProcessingFrame) {
-            isProcessingFrame = true;
-            loopStatus.innerText = "Processing...";
-            loopStatus.style.color = "#00ff66";
-            
-            try {
-              if (currentMode === 'GESTURE') {
-                await faceDetection.send({ image: videoElement });
-                await hands.send({ image: videoElement });
-              } else if (currentMode === 'FOLLOWER') {
-                await faceDetection.send({ image: videoElement });
-              }
-            } catch (err) {
-              console.warn("Frame dropped:", err);
-            } finally {
-              isProcessingFrame = false;
-            }
+    // Initialize Camera Utility
+    window.onload = () => {
+      const camera = new Camera(videoElement, {
+        onFrame: async () => {
+          loopStatus.innerText = "Active Feed 🟢";
+          loopStatus.style.color = "#00ff66";
+          
+          if (currentMode === 'GESTURE') {
+            await faceDetection.send({ image: videoElement });
+            await hands.send({ image: videoElement });
+          } else if (currentMode === 'FOLLOWER') {
+            await faceDetection.send({ image: videoElement });
           }
-          requestAnimationFrame(processFrame);
-        }
-        processFrame();
-      } catch (err) {
-        loopStatus.innerText = "Camera Error";
+        },
+        width: 640,
+        height: 480
+      });
+      
+      camera.start().catch(err => {
+        loopStatus.innerText = "Cam Blocked/Error";
         loopStatus.style.color = "#ff0077";
-        console.error(err);
-      }
-    }
-
-    window.onload = startCameraDirectly;
+        console.error("Camera Init Error:", err);
+      });
+    };
   </script>
 </body>
 </html>
