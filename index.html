@@ -21,7 +21,8 @@
     .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
     .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
     #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
-    #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
+    #overlayText { color: #00f0ff; font-size: 14px; font-weight: bold; text-align: center; }
+    #debugText { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
     .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
     button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
     video { display: none; }
@@ -29,15 +30,14 @@
 </head>
 <body>
 
-  <!-- LEFT EYE -->
   <div class="eye-container">
     <div id="leftBrow" class="eyebrow"></div>
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- CENTER CONTROL PANEL -->
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
+    <div id="debugText">Fingers Detected: None</div>
     <div class="btn-group">
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
@@ -45,7 +45,6 @@
     </div>
   </div>
 
-  <!-- RIGHT EYE -->
   <div class="eye-container">
     <div id="rightBrow" class="eyebrow"></div>
     <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
@@ -62,6 +61,7 @@
     let greetingCooldown = false;
 
     const overlayText = document.getElementById('overlayText');
+    const debugText = document.getElementById('debugText');
     const leftEye = document.getElementById('leftEye');
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
@@ -89,7 +89,7 @@
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
           let encoder = new TextEncoder();
-          txCharacteristic.writeValue(encoder.encode(cmd));
+          txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
         }
         setExpression(cmd);
         lastCmd = cmd;
@@ -99,7 +99,7 @@
     function sendDirectCommand(cmd) {
       if (txCharacteristic) {
         let encoder = new TextEncoder();
-        txCharacteristic.writeValue(encoder.encode(cmd));
+        txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
       }
       setExpression(cmd);
     }
@@ -119,7 +119,6 @@
       greetingCooldown = true;
       overlayText.innerText = "Greeting Visitor!";
       
-      // Step forward, step back, halt, then play greeting audio
       sendDirectCommand('F');
       
       setTimeout(() => {
@@ -133,7 +132,6 @@
             overlayText.innerText = "Mode: " + (currentMode === 'GESTURE' ? "Gesture" : "Follower");
           }, 2500);
 
-          // Cooldown for 8 seconds before triggering another greeting
           setTimeout(() => {
             greetingCooldown = false;
           }, 8000);
@@ -201,16 +199,21 @@
 
     const videoElement = document.getElementById('webcam');
 
+    // HAND GESTURE DETECTION CALLBACK
     function onHandResults(results) {
       if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
 
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
-        if (landmarks[8].y < landmarks[6].y) openFingers++;
-        if (landmarks[12].y < landmarks[10].y) openFingers++;
-        if (landmarks[16].y < landmarks[14].y) openFingers++;
-        if (landmarks[20].y < landmarks[18].y) openFingers++;
+        
+        // Count raised fingers relative to knuckle joints
+        if (landmarks[8].y < landmarks[6].y) openFingers++;   // Index
+        if (landmarks[12].y < landmarks[10].y) openFingers++; // Middle
+        if (landmarks[16].y < landmarks[14].y) openFingers++; // Ring
+        if (landmarks[20].y < landmarks[18].y) openFingers++; // Pinky
+
+        debugText.innerText = "Fingers: " + openFingers;
 
         if (openFingers >= 4) sendCommand('F');
         else if (openFingers === 3) sendCommand('B');
@@ -218,10 +221,12 @@
         else if (openFingers === 1) sendCommand('L');
         else sendCommand('S');
       } else {
+        debugText.innerText = "Fingers: None";
         sendCommand('S');
       }
     }
 
+    // FACE DETECTION CALLBACK
     function onFaceResults(results) {
       if (isDancing) return;
 
@@ -229,13 +234,11 @@
         const detection = results.detections[0];
         const faceCenterX = 1.0 - detection.boundingBox.xCenter;
 
-        // Visitor Greeting sequence when a face appears in Gesture Mode
         if (currentMode === 'GESTURE' && !greetingCooldown && !isGreeting) {
           executeGreetingRoutine();
           return;
         }
 
-        // Follower logic when in FOLLOWER mode
         if (currentMode === 'FOLLOWER' && !isGreeting) {
           if (faceCenterX < 0.38) sendCommand('L');
           else if (faceCenterX > 0.62) sendCommand('R');
@@ -254,7 +257,7 @@
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Frame processor running continuously without breaking state transitions
+    // Continuous Frame Pipeline
     const camera = new Camera(videoElement, {
       onFrame: async () => {
         if (currentMode === 'GESTURE') {
