@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fresher Bot - Dual Eye Control</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background-color: #050508; margin: 0; padding: 10px 15px;
+      display: flex; justify-content: space-between; align-items: center;
+      height: 100dvh; width: 100vw; font-family: sans-serif; overflow: hidden;
+    }
+    .eye-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 28vw; }
+    .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
+    .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
+    .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
+    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
+    #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
+    .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
+    button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
+    video { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- LEFT EYE -->
+  <div class="eye-container">
+    <div id="leftBrow" class="eyebrow"></div>
+    <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
+  </div>
+
+  <!-- CENTER CONTROL PANEL -->
+  <div id="centerControlPanel">
+    <div id="overlayText">Status: Disconnected</div>
+    <div class="btn-group">
+      <button onclick="connectBluetooth()">Connect ESP32 📶</button>
+      <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
+      <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
+    </div>
+  </div>
+
+  <!-- RIGHT EYE -->
+  <div class="eye-container">
+    <div id="rightBrow" class="eyebrow"></div>
+    <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
+  </div>
+
+  <video id="webcam" autoplay playsinline></video>
+
+  <script>
+    let bluetoothDevice, txCharacteristic;
+    let currentMode = 'GESTURE';
+    let lastCmd = '';
+    let isDancing = false;
+    let isGreeting = false;
+    let greetingCooldown = false;
+
+    const overlayText = document.getElementById('overlayText');
+    const leftEye = document.getElementById('leftEye');
+    const rightEye = document.getElementById('rightEye');
+    const leftPupil = document.getElementById('leftPupil');
+    const rightPupil = document.getElementById('rightPupil');
+
+    async function connectBluetooth() {
+      try {
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'Fresher_Bot_BT' }],
+          optionalServices: ['49535343-fe7d-4ae5-8fa9-9fafd205e455']
+        });
+        const server = await bluetoothDevice.gatt.connect();
+        const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
+        txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
+        overlayText.innerText = "Status: Connected!";
+        speakGreeting("Connected to rover!");
+      } catch (e) {
+        console.log(e);
+        overlayText.innerText = "Connection Failed";
+      }
+    }
+
+    function sendCommand(cmd) {
+      if (isDancing || isGreeting) return;
+      if (cmd !== lastCmd) {
+        if (txCharacteristic) {
+          let encoder = new TextEncoder();
+          txCharacteristic.writeValue(encoder.encode(cmd));
+        }
+        setExpression(cmd);
+        lastCmd = cmd;
+      }
+    }
+
+    function sendDirectCommand(cmd) {
+      if (txCharacteristic) {
+        let encoder = new TextEncoder();
+        txCharacteristic.writeValue(encoder.encode(cmd));
+      }
+      setExpression(cmd);
+    }
+
+    function speakGreeting(messageText) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(messageText);
+        msg.rate = 1.0;
+        msg.pitch = 1.1;
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+    function executeGreetingRoutine() {
+      isGreeting = true;
+      greetingCooldown = true;
+      overlayText.innerText = "Greeting Visitor!";
+      
+      // Step forward, step back, halt, then play greeting audio
+      sendDirectCommand('F');
+      
+      setTimeout(() => {
+        sendDirectCommand('B');
+        setTimeout(() => {
+          sendDirectCommand('S');
+          speakGreeting("Welcome to Fresher's Day! Glad to see you here!");
+          
+          setTimeout(() => {
+            isGreeting = false;
+            overlayText.innerText = "Mode: " + (currentMode === 'GESTURE' ? "Gesture" : "Follower");
+          }, 2500);
+
+          // Cooldown for 8 seconds before triggering another greeting
+          setTimeout(() => {
+            greetingCooldown = false;
+          }, 8000);
+        }, 400);
+      }, 400);
+    }
+
+    function triggerDance() {
+      isDancing = true;
+      overlayText.innerText = "PARTY TIME! 💃";
+      speakGreeting("Let's dance freshers!");
+      
+      let moves = ['L', 'R', 'L', 'R', 'B', 'F', 'S'];
+      let i = 0;
+      let interval = setInterval(() => {
+        if (i < moves.length) {
+          sendDirectCommand(moves[i]);
+          i++;
+        } else {
+          clearInterval(interval);
+          isDancing = false;
+          overlayText.innerText = "Status: Ready";
+        }
+      }, 600);
+    }
+
+    function toggleMode() {
+      if (currentMode === 'GESTURE') {
+        currentMode = 'FOLLOWER';
+        document.getElementById('modeBtn').innerText = "Mode: Follower";
+        overlayText.innerText = "Mode: Follower";
+      } else {
+        currentMode = 'GESTURE';
+        document.getElementById('modeBtn').innerText = "Mode: Gesture";
+        overlayText.innerText = "Mode: Gesture";
+      }
+      sendCommand('S');
+    }
+
+    function setExpression(cmd) {
+      leftEye.style.height = '155px'; rightEye.style.height = '155px';
+      leftPupil.style.transform = 'none'; rightPupil.style.transform = 'none';
+
+      if (cmd === 'L') {
+        overlayText.innerText = "Turning Left";
+        leftPupil.style.transform = 'translateX(-20px)';
+        rightPupil.style.transform = 'translateX(-20px)';
+      } else if (cmd === 'R') {
+        overlayText.innerText = "Turning Right";
+        leftPupil.style.transform = 'translateX(20px)';
+        rightPupil.style.transform = 'translateX(20px)';
+      } else if (cmd === 'F') {
+        overlayText.innerText = "Moving Forward";
+        leftEye.style.height = '125px'; rightEye.style.height = '125px';
+      } else if (cmd === 'B') {
+        overlayText.innerText = "Reversing Back";
+        leftPupil.style.transform = 'translateY(-15px)';
+        rightPupil.style.transform = 'translateY(-15px)';
+      } else {
+        overlayText.innerText = "Idle / Stop";
+        leftPupil.style.transform = 'translateY(10px)';
+        rightPupil.style.transform = 'translateY(10px)';
+      }
+    }
+
+    const videoElement = document.getElementById('webcam');
+
+    function onHandResults(results) {
+      if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        let openFingers = 0;
+        if (landmarks[8].y < landmarks[6].y) openFingers++;
+        if (landmarks[12].y < landmarks[10].y) openFingers++;
+        if (landmarks[16].y < landmarks[14].y) openFingers++;
+        if (landmarks[20].y < landmarks[18].y) openFingers++;
+
+        if (openFingers >= 4) sendCommand('F');
+        else if (openFingers === 3) sendCommand('B');
+        else if (openFingers === 2) sendCommand('R');
+        else if (openFingers === 1) sendCommand('L');
+        else sendCommand('S');
+      } else {
+        sendCommand('S');
+      }
+    }
+
+    function onFaceResults(results) {
+      if (isDancing) return;
+
+      if (results.detections && results.detections.length > 0) {
+        const detection = results.detections[0];
+        const faceCenterX = 1.0 - detection.boundingBox.xCenter;
+
+        // Visitor Greeting sequence when a face appears in Gesture Mode
+        if (currentMode === 'GESTURE' && !greetingCooldown && !isGreeting) {
+          executeGreetingRoutine();
+          return;
+        }
+
+        // Follower logic when in FOLLOWER mode
+        if (currentMode === 'FOLLOWER' && !isGreeting) {
+          if (faceCenterX < 0.38) sendCommand('L');
+          else if (faceCenterX > 0.62) sendCommand('R');
+          else sendCommand('F');
+        }
+      } else if (currentMode === 'FOLLOWER' && !isGreeting) {
+        sendCommand('S');
+      }
+    }
+
+    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+    hands.onResults(onHandResults);
+
+    const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
+    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
+    faceDetection.onResults(onFaceResults);
+
+    // Frame processor running continuously without breaking state transitions
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        if (currentMode === 'GESTURE') {
+          await faceDetection.send({ image: videoElement });
+          await hands.send({ image: videoElement });
+        } else if (currentMode === 'FOLLOWER') {
+          await faceDetection.send({ image: videoElement });
+        }
+      },
+      width: 640, height: 480
+    });
+    camera.start();
+  </script>
+</body>
+</html>
