@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Dual Eye Control</title>
+  <title>Fresher Bot - Live Feed & Controls</title>
 
   <!-- MediaPipe Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -13,48 +13,69 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      background-color: #050508; margin: 0; padding: 10px 15px;
-      display: flex; justify-content: space-between; align-items: center;
-      height: 100dvh; width: 100vw; font-family: sans-serif; overflow: hidden;
+      background-color: #050508; margin: 0; padding: 0;
+      height: 100dvh; width: 100vw; font-family: monospace; overflow: hidden;
+      position: relative;
     }
-    .eye-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 28vw; }
-    .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
-    .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
-    .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
-    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
-    #overlayText { color: #00f0ff; font-size: 14px; font-weight: bold; text-align: center; }
-    #debugText { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
-    .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
-    button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
-    video { width: 1px; height: 1px; opacity: 0.01; position: absolute; top: 0; left: 0; pointer-events: none; }
+    
+    /* Live Camera Screen */
+    #webcam {
+      width: 100vw; height: 100dvh;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror camera feed for natural controls */
+      position: absolute; top: 0; left: 0; z-index: 1;
+    }
+
+    /* Diagnostics Data Overlay (Left Side) */
+    #diagnosticPanel {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(5, 5, 8, 0.82);
+      border: 1px solid #00f0ff; border-radius: 10px;
+      padding: 10px 14px; color: #00f0ff;
+      font-size: 11px; line-height: 1.5;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+      max-width: 220px;
+    }
+
+    .diag-title { font-weight: bold; font-size: 12px; color: #fff; margin-bottom: 4px; text-transform: uppercase; }
+    .diag-val { color: #ff0077; font-weight: bold; }
+
+    /* Right Control Buttons Overlay */
+    #centerControlPanel {
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      display: flex; flex-direction: column; gap: 8px; width: 140px;
+    }
+
+    button {
+      padding: 10px; font-size: 11px; font-weight: bold;
+      color: #000; background-color: #00f0ff;
+      border: none; border-radius: 12px; cursor: pointer;
+      box-shadow: 0 0 8px rgba(0,240,255,0.4);
+    }
   </style>
 </head>
 <body>
 
-  <!-- LEFT EYE -->
-  <div class="eye-container">
-    <div id="leftBrow" class="eyebrow"></div>
-    <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
-  </div>
-
-  <!-- CENTER CONTROL PANEL -->
-  <div id="centerControlPanel">
-    <div id="overlayText">Status: Disconnected</div>
-    <div id="debugText">Camera: Initializing...</div>
-    <div class="btn-group">
-      <button onclick="connectBluetooth()">Connect ESP32 📶</button>
-      <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
-      <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
-    </div>
-  </div>
-
-  <!-- RIGHT EYE -->
-  <div class="eye-container">
-    <div id="rightBrow" class="eyebrow"></div>
-    <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
-  </div>
-
+  <!-- LIVE CAMERA FEED -->
   <video id="webcam" autoplay playsinline muted></video>
+
+  <!-- DIAGNOSTIC DATA OVERLAY -->
+  <div id="diagnosticPanel">
+    <div class="diag-title">🤖 Bot Diagnostics</div>
+    <div>BLE: <span id="bleStatus" class="diag-val">Disconnected</span></div>
+    <div>Mode: <span id="modeStatus" class="diag-val">GESTURE</span></div>
+    <div>Command: <span id="cmdStatus" class="diag-val">STOP (S)</span></div>
+    <div>Hand Data: <span id="handStatus" class="diag-val">Searching...</span></div>
+    <div>Face Data: <span id="faceStatus" class="diag-val">Searching...</span></div>
+    <div>Loop State: <span id="loopStatus" class="diag-val">Active</span></div>
+  </div>
+
+  <!-- CONTROL BUTTONS -->
+  <div id="centerControlPanel">
+    <button onclick="connectBluetooth()">Connect ESP32 📶</button>
+    <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
+    <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
+  </div>
 
   <script>
     let bluetoothDevice, txCharacteristic;
@@ -65,12 +86,12 @@
     let greetingCooldown = false;
     let isProcessingFrame = false;
 
-    const overlayText = document.getElementById('overlayText');
-    const debugText = document.getElementById('debugText');
-    const leftEye = document.getElementById('leftEye');
-    const rightEye = document.getElementById('rightEye');
-    const leftPupil = document.getElementById('leftPupil');
-    const rightPupil = document.getElementById('rightPupil');
+    const bleStatus = document.getElementById('bleStatus');
+    const modeStatus = document.getElementById('modeStatus');
+    const cmdStatus = document.getElementById('cmdStatus');
+    const handStatus = document.getElementById('handStatus');
+    const faceStatus = document.getElementById('faceStatus');
+    const loopStatus = document.getElementById('loopStatus');
     const videoElement = document.getElementById('webcam');
 
     async function connectBluetooth() {
@@ -82,11 +103,12 @@
         const server = await bluetoothDevice.gatt.connect();
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
-        overlayText.innerText = "Status: Connected!";
+        bleStatus.innerText = "Connected";
+        bleStatus.style.color = "#00ff66";
         speakGreeting("Connected!");
       } catch (e) {
         console.log(e);
-        overlayText.innerText = "Connection Failed";
+        bleStatus.innerText = "Failed";
       }
     }
 
@@ -97,7 +119,7 @@
           let encoder = new TextEncoder();
           txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
         }
-        setExpression(cmd);
+        cmdStatus.innerText = cmd;
         lastCmd = cmd;
       }
     }
@@ -107,7 +129,7 @@
         let encoder = new TextEncoder();
         txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
       }
-      setExpression(cmd);
+      cmdStatus.innerText = cmd;
     }
 
     function speakGreeting(messageText) {
@@ -123,7 +145,7 @@
     function executeGreetingRoutine() {
       isGreeting = true;
       greetingCooldown = true;
-      overlayText.innerText = "Greeting Visitor!";
+      cmdStatus.innerText = "GREETING";
       
       sendDirectCommand('F');
       
@@ -135,7 +157,6 @@
           
           setTimeout(() => {
             isGreeting = false;
-            overlayText.innerText = "Mode: " + (currentMode === 'GESTURE' ? "Gesture" : "Follower");
           }, 2500);
 
           setTimeout(() => {
@@ -147,7 +168,7 @@
 
     function triggerDance() {
       isDancing = true;
-      overlayText.innerText = "PARTY TIME! 💃";
+      cmdStatus.innerText = "DANCE";
       speakGreeting("Let's dance!");
       
       let moves = ['L', 'R', 'L', 'R', 'B', 'F', 'S'];
@@ -159,7 +180,6 @@
         } else {
           clearInterval(interval);
           isDancing = false;
-          overlayText.innerText = "Status: Ready";
         }
       }, 600);
     }
@@ -168,39 +188,13 @@
       if (currentMode === 'GESTURE') {
         currentMode = 'FOLLOWER';
         document.getElementById('modeBtn').innerText = "Mode: Follower";
-        overlayText.innerText = "Mode: Follower";
+        modeStatus.innerText = "FOLLOWER";
       } else {
         currentMode = 'GESTURE';
         document.getElementById('modeBtn').innerText = "Mode: Gesture";
-        overlayText.innerText = "Mode: Gesture";
+        modeStatus.innerText = "GESTURE";
       }
       sendCommand('S');
-    }
-
-    function setExpression(cmd) {
-      leftEye.style.height = '155px'; rightEye.style.height = '155px';
-      leftPupil.style.transform = 'none'; rightPupil.style.transform = 'none';
-
-      if (cmd === 'L') {
-        overlayText.innerText = "Turning Left";
-        leftPupil.style.transform = 'translateX(-20px)';
-        rightPupil.style.transform = 'translateX(-20px)';
-      } else if (cmd === 'R') {
-        overlayText.innerText = "Turning Right";
-        leftPupil.style.transform = 'translateX(20px)';
-        rightPupil.style.transform = 'translateX(20px)';
-      } else if (cmd === 'F') {
-        overlayText.innerText = "Moving Forward";
-        leftEye.style.height = '125px'; rightEye.style.height = '125px';
-      } else if (cmd === 'B') {
-        overlayText.innerText = "Reversing Back";
-        leftPupil.style.transform = 'translateY(-15px)';
-        rightPupil.style.transform = 'translateY(-15px)';
-      } else {
-        overlayText.innerText = "Idle / Stop";
-        leftPupil.style.transform = 'translateY(10px)';
-        rightPupil.style.transform = 'translateY(10px)';
-      }
     }
 
     // HAND GESTURE CALLBACK
@@ -216,7 +210,7 @@
         if (landmarks[16].y < landmarks[14].y) openFingers++;
         if (landmarks[20].y < landmarks[18].y) openFingers++;
 
-        debugText.innerText = "Fingers Active: " + openFingers;
+        handStatus.innerText = openFingers + " Fingers";
 
         if (openFingers >= 4) sendCommand('F');
         else if (openFingers === 3) sendCommand('B');
@@ -224,7 +218,7 @@
         else if (openFingers === 1) sendCommand('L');
         else sendCommand('S');
       } else {
-        debugText.innerText = "Tracking Active (No Hand)";
+        handStatus.innerText = "No Hand Detected";
         sendCommand('S');
       }
     }
@@ -237,24 +231,27 @@
         const detection = results.detections[0];
         const faceCenterX = 1.0 - detection.boundingBox.xCenter;
 
+        faceStatus.innerText = "Detected";
+
         if (currentMode === 'GESTURE' && !greetingCooldown && !isGreeting) {
           executeGreetingRoutine();
           return;
         }
 
         if (currentMode === 'FOLLOWER' && !isGreeting) {
-          debugText.innerText = "Face Detected: Tracking";
           if (faceCenterX < 0.38) sendCommand('L');
           else if (faceCenterX > 0.62) sendCommand('R');
           else sendCommand('F');
         }
-      } else if (currentMode === 'FOLLOWER' && !isGreeting) {
-        debugText.innerText = "Tracking Active (No Face)";
-        sendCommand('S');
+      } else {
+        faceStatus.innerText = "No Face Detected";
+        if (currentMode === 'FOLLOWER' && !isGreeting) {
+          sendCommand('S');
+        }
       }
     }
 
-    // Initialize Models
+    // Initialize MediaPipe Models
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
     hands.onResults(onHandResults);
@@ -263,7 +260,7 @@
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Direct Native Camera Access with Frame Locking & Async Guard
+    // Direct Native Camera Access
     async function startCameraDirectly() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -272,11 +269,13 @@
         });
         videoElement.srcObject = stream;
         await videoElement.play();
-        debugText.innerText = "Camera Active";
 
         async function processFrame() {
           if (videoElement.readyState === 4 && !isProcessingFrame) {
             isProcessingFrame = true;
+            loopStatus.innerText = "Processing...";
+            loopStatus.style.color = "#00ff66";
+            
             try {
               if (currentMode === 'GESTURE') {
                 await faceDetection.send({ image: videoElement });
@@ -285,7 +284,7 @@
                 await faceDetection.send({ image: videoElement });
               }
             } catch (err) {
-              console.warn("Frame processing dropped:", err);
+              console.warn("Frame dropped:", err);
             } finally {
               isProcessingFrame = false;
             }
@@ -294,7 +293,8 @@
         }
         processFrame();
       } catch (err) {
-        debugText.innerText = "Camera Access Denied!";
+        loopStatus.innerText = "Camera Error";
+        loopStatus.style.color = "#ff0077";
         console.error(err);
       }
     }
