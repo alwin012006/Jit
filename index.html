@@ -63,6 +63,7 @@
     let isDancing = false;
     let isGreeting = false;
     let greetingCooldown = false;
+    let isProcessingFrame = false;
 
     const overlayText = document.getElementById('overlayText');
     const debugText = document.getElementById('debugText');
@@ -262,7 +263,7 @@
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Direct Native Camera Access for Mobile Chrome
+    // Direct Native Camera Access with Frame Locking & Async Guard
     async function startCameraDirectly() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -274,12 +275,19 @@
         debugText.innerText = "Camera Active";
 
         async function processFrame() {
-          if (videoElement.readyState === 4) {
-            if (currentMode === 'GESTURE') {
-              await faceDetection.send({ image: videoElement });
-              await hands.send({ image: videoElement });
-            } else if (currentMode === 'FOLLOWER') {
-              await faceDetection.send({ image: videoElement });
+          if (videoElement.readyState === 4 && !isProcessingFrame) {
+            isProcessingFrame = true;
+            try {
+              if (currentMode === 'GESTURE') {
+                await faceDetection.send({ image: videoElement });
+                await hands.send({ image: videoElement });
+              } else if (currentMode === 'FOLLOWER') {
+                await faceDetection.send({ image: videoElement });
+              }
+            } catch (err) {
+              console.warn("Frame processing dropped:", err);
+            } finally {
+              isProcessingFrame = false;
             }
           }
           requestAnimationFrame(processFrame);
@@ -291,7 +299,6 @@
       }
     }
 
-    // Start camera stream on page load
     window.onload = startCameraDirectly;
   </script>
 </body>
