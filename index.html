@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Fresher Bot - Dual Eye Control</title>
 
+  <!-- MediaPipe Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
@@ -25,19 +26,21 @@
     #debugText { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
     .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
     button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
-    video { display: none; }
+    video { width: 1px; height: 1px; opacity: 0.01; position: absolute; top: 0; left: 0; pointer-events: none; }
   </style>
 </head>
 <body>
 
+  <!-- LEFT EYE -->
   <div class="eye-container">
     <div id="leftBrow" class="eyebrow"></div>
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
+  <!-- CENTER CONTROL PANEL -->
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
-    <div id="debugText">Fingers Detected: None</div>
+    <div id="debugText">Camera: Initializing...</div>
     <div class="btn-group">
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
@@ -45,12 +48,13 @@
     </div>
   </div>
 
+  <!-- RIGHT EYE -->
   <div class="eye-container">
     <div id="rightBrow" class="eyebrow"></div>
     <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
   </div>
 
-  <video id="webcam" autoplay playsinline></video>
+  <video id="webcam" autoplay playsinline muted></video>
 
   <script>
     let bluetoothDevice, txCharacteristic;
@@ -66,6 +70,7 @@
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
+    const videoElement = document.getElementById('webcam');
 
     async function connectBluetooth() {
       try {
@@ -77,7 +82,7 @@
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
         overlayText.innerText = "Status: Connected!";
-        speakGreeting("Connected to rover!");
+        speakGreeting("Connected!");
       } catch (e) {
         console.log(e);
         overlayText.innerText = "Connection Failed";
@@ -125,7 +130,7 @@
         sendDirectCommand('B');
         setTimeout(() => {
           sendDirectCommand('S');
-          speakGreeting("Welcome to Fresher's Day! Glad to see you here!");
+          speakGreeting("Welcome to Fresher's Day!");
           
           setTimeout(() => {
             isGreeting = false;
@@ -142,7 +147,7 @@
     function triggerDance() {
       isDancing = true;
       overlayText.innerText = "PARTY TIME! 💃";
-      speakGreeting("Let's dance freshers!");
+      speakGreeting("Let's dance!");
       
       let moves = ['L', 'R', 'L', 'R', 'B', 'F', 'S'];
       let i = 0;
@@ -197,9 +202,7 @@
       }
     }
 
-    const videoElement = document.getElementById('webcam');
-
-    // HAND GESTURE DETECTION CALLBACK
+    // HAND GESTURE CALLBACK
     function onHandResults(results) {
       if (currentMode !== 'GESTURE' || isDancing || isGreeting) return;
 
@@ -207,13 +210,12 @@
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
         
-        // Count raised fingers relative to knuckle joints
-        if (landmarks[8].y < landmarks[6].y) openFingers++;   // Index
-        if (landmarks[12].y < landmarks[10].y) openFingers++; // Middle
-        if (landmarks[16].y < landmarks[14].y) openFingers++; // Ring
-        if (landmarks[20].y < landmarks[18].y) openFingers++; // Pinky
+        if (landmarks[8].y < landmarks[6].y) openFingers++;
+        if (landmarks[12].y < landmarks[10].y) openFingers++;
+        if (landmarks[16].y < landmarks[14].y) openFingers++;
+        if (landmarks[20].y < landmarks[18].y) openFingers++;
 
-        debugText.innerText = "Fingers: " + openFingers;
+        debugText.innerText = "Fingers Active: " + openFingers;
 
         if (openFingers >= 4) sendCommand('F');
         else if (openFingers === 3) sendCommand('B');
@@ -221,7 +223,7 @@
         else if (openFingers === 1) sendCommand('L');
         else sendCommand('S');
       } else {
-        debugText.innerText = "Fingers: None";
+        debugText.innerText = "Tracking Active (No Hand)";
         sendCommand('S');
       }
     }
@@ -240,15 +242,18 @@
         }
 
         if (currentMode === 'FOLLOWER' && !isGreeting) {
+          debugText.innerText = "Face Detected: Tracking";
           if (faceCenterX < 0.38) sendCommand('L');
           else if (faceCenterX > 0.62) sendCommand('R');
           else sendCommand('F');
         }
       } else if (currentMode === 'FOLLOWER' && !isGreeting) {
+        debugText.innerText = "Tracking Active (No Face)";
         sendCommand('S');
       }
     }
 
+    // Initialize Models
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
     hands.onResults(onHandResults);
@@ -257,19 +262,37 @@
     faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Continuous Frame Pipeline
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        if (currentMode === 'GESTURE') {
-          await faceDetection.send({ image: videoElement });
-          await hands.send({ image: videoElement });
-        } else if (currentMode === 'FOLLOWER') {
-          await faceDetection.send({ image: videoElement });
+    // Direct Native Camera Access for Mobile Chrome
+    async function startCameraDirectly() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        videoElement.srcObject = stream;
+        await videoElement.play();
+        debugText.innerText = "Camera Active";
+
+        async function processFrame() {
+          if (videoElement.readyState === 4) {
+            if (currentMode === 'GESTURE') {
+              await faceDetection.send({ image: videoElement });
+              await hands.send({ image: videoElement });
+            } else if (currentMode === 'FOLLOWER') {
+              await faceDetection.send({ image: videoElement });
+            }
+          }
+          requestAnimationFrame(processFrame);
         }
-      },
-      width: 640, height: 480
-    });
-    camera.start();
+        processFrame();
+      } catch (err) {
+        debugText.innerText = "Camera Access Denied!";
+        console.error(err);
+      }
+    }
+
+    // Start camera stream on page load
+    window.onload = startCameraDirectly;
   </script>
 </body>
 </html>
