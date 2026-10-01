@@ -20,9 +20,9 @@
     .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
     .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
     .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
-    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
+    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 38vw; z-index: 10; }
     #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
-    button { padding: 9px 16px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; box-shadow: 0 0 10px rgba(0, 240, 255, 0.4); }
+    button { padding: 10px 18px; font-size: 12px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; box-shadow: 0 0 12px rgba(0, 240, 255, 0.4); }
     video { display: none; }
   </style>
 </head>
@@ -34,7 +34,7 @@
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- CENTER PANEL -->
+  <!-- CENTER PANEL (ONLY CONNECT BUTTON & STATUS) -->
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
     <button onclick="connectBluetooth()">Connect ESP32 📶</button>
@@ -79,7 +79,7 @@
     }
 
     function sendCommand(cmd) {
-      // Reset safety timeout on every command processing
+      // Reset watchdog on every received frame command
       clearTimeout(safetyWatchdog);
       
       if (cmd !== lastCmd) {
@@ -91,11 +91,11 @@
         lastCmd = cmd;
       }
 
-      // If active movement command is sent, force automatic stop if no frame updates within 250ms
+      // Instant Auto-Stop: If no hand is detected for 200ms, force STOP command ('S')
       if (cmd !== 'S') {
         safetyWatchdog = setTimeout(() => {
           sendCommand('S');
-        }, 250);
+        }, 200);
       }
     }
 
@@ -152,7 +152,7 @@
         else if (openFingers === 1) sendCommand('L');
         else sendCommand('S');
       } else {
-        // Immediate hard stop when hand is out of frame
+        // Immediate hard stop when hand is removed from view
         sendCommand('S');
       }
     }
