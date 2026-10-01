@@ -20,12 +20,11 @@
     .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
     .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
     .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
-    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 38vw; z-index: 10; }
+    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 38vw; z-index: 10; }
     #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
-    #motionStatus { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
-    .btn-group { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 170px; }
-    button { padding: 8px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
-    video, canvas { display: none; }
+    .btn-group { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 170px; }
+    button { padding: 9px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
+    video { display: none; }
   </style>
 </head>
 <body>
@@ -37,10 +36,8 @@
 
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
-    <div id="motionStatus">Motion: Idle</div>
     <div class="btn-group">
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
-      <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
     </div>
   </div>
 
@@ -50,25 +47,18 @@
   </div>
 
   <video id="webcam" autoplay playsinline></video>
-  <canvas id="motionCanvas" width="160" height="120"></canvas>
 
   <script>
     let bluetoothDevice, txCharacteristic;
-    let currentMode = 'GESTURE';
     let lastCmd = '';
-    let prevFrameData = null;
     let greetingCooldown = false;
 
     const overlayText = document.getElementById('overlayText');
-    const motionStatus = document.getElementById('motionStatus');
     const leftEye = document.getElementById('leftEye');
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
     const videoElement = document.getElementById('webcam');
-    
-    const motionCanvas = document.getElementById('motionCanvas');
-    const motionCtx = motionCanvas.getContext('2d');
 
     async function connectBluetooth() {
       try {
@@ -108,17 +98,6 @@
       }
     }
 
-    function toggleMode() {
-      if (currentMode === 'GESTURE') {
-        currentMode = 'FOLLOWER';
-        document.getElementById('modeBtn').innerText = "Mode: Follower";
-      } else {
-        currentMode = 'GESTURE';
-        document.getElementById('modeBtn').innerText = "Mode: Gesture";
-      }
-      sendCommand('S');
-    }
-
     function setExpression(cmd) {
       leftEye.style.height = '155px'; rightEye.style.height = '155px';
       leftPupil.style.transform = 'none'; rightPupil.style.transform = 'none';
@@ -145,48 +124,8 @@
       }
     }
 
-    // Motion Detection Logic via Frame Differencing
-    function detectMotion() {
-      if (videoElement.readyState !== 4) return;
-      
-      motionCtx.drawImage(videoElement, 0, 0, motionCanvas.width, motionCanvas.height);
-      const currentFrame = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
-      const data = currentFrame.data;
-
-      if (prevFrameData) {
-        let diff = 0;
-        for (let i = 0; i < data.length; i += 16) {
-          const rDiff = Math.abs(data[i] - prevFrameData[i]);
-          const gDiff = Math.abs(data[i + 1] - prevFrameData[i + 1]);
-          const bDiff = Math.abs(data[i + 2] - prevFrameData[i + 2]);
-          if (rDiff + gDiff + bDiff > 100) diff++;
-        }
-
-        if (diff > 120) {
-          motionStatus.innerText = "Motion: Detected! ⚡";
-          motionStatus.style.color = "#00ff66";
-
-          // Trigger "Welcome to Symposium" greeting when motion is detected
-          if (!greetingCooldown) {
-            greetingCooldown = true;
-            speak("Welcome to symposium!");
-            
-            // Cooldown for 8 seconds before triggering another greeting
-            setTimeout(() => {
-              greetingCooldown = false;
-            }, 8000);
-          }
-        } else {
-          motionStatus.innerText = "Motion: Idle";
-          motionStatus.style.color = "#ff0077";
-        }
-      }
-      prevFrameData = data;
-    }
-
     // Hand Gesture Recognition Callback
     function onHandResults(results) {
-      if (currentMode !== 'GESTURE') return;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
@@ -205,18 +144,18 @@
       }
     }
 
-    // Human Follower Face Callback
+    // Face Detection Visitor Greeting Callback
     function onFaceResults(results) {
-      if (currentMode !== 'FOLLOWER') return;
       if (results.detections && results.detections.length > 0) {
-        const detection = results.detections[0];
-        const faceCenterX = 1.0 - detection.boundingBox.xCenter;
-
-        if (faceCenterX < 0.40) sendCommand('L');
-        else if (faceCenterX > 0.60) sendCommand('R');
-        else sendCommand('F');
-      } else {
-        sendCommand('S');
+        if (!greetingCooldown) {
+          greetingCooldown = true;
+          speak("Welcome to symposium!");
+          
+          // Cooldown for 8 seconds before triggering another greeting
+          setTimeout(() => {
+            greetingCooldown = false;
+          }, 8000);
+        }
       }
     }
 
@@ -230,9 +169,8 @@
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
-        detectMotion();
-        if (currentMode === 'GESTURE') await hands.send({ image: videoElement });
-        if (currentMode === 'FOLLOWER') await faceDetection.send({ image: videoElement });
+        await hands.send({ image: videoElement });
+        await faceDetection.send({ image: videoElement });
       },
       width: 640, height: 480
     });
