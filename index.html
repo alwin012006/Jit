@@ -3,85 +3,88 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Eyes Only</title>
+  <title>Fresher Bot - Smooth Eyes</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+  <!-- Pinned stable versions -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/face_detection.js" crossorigin="anonymous"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
     body {
-      background-color: #050508;
+      background: #050508;
       height: 100dvh;
       width: 100vw;
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 12vw;
+      gap: 11vw;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: system-ui, sans-serif;
     }
-
     .eye-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
+      gap: 16px;
     }
-
     .eyebrow {
       width: 140px;
       height: 12px;
-      background-color: #00f0ff;
+      background: #00f0ff;
       border-radius: 6px;
       box-shadow: 0 0 18px #00f0ff;
-      transition: all 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
-
     .eye {
       width: 155px;
       height: 190px;
-      background-color: #00f0ff;
+      background: #00f0ff;
       border-radius: 80px;
       position: relative;
       box-shadow: 0 0 35px #00f0ff;
-      transition: all 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
-
     .pupil {
       width: 52px;
       height: 52px;
-      background-color: #050508;
+      background: #050508;
       border-radius: 50%;
       position: absolute;
       top: 69px;
       left: 51.5px;
-      transition: transform 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
-
     video { display: none; }
+
+    /* Tiny debug (remove later if you want pure eyes) */
+    #debug {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #00f0ff;
+      font-size: 13px;
+      opacity: 0.7;
+      pointer-events: none;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
 
-  <!-- LEFT EYE -->
   <div class="eye-container">
     <div id="leftBrow" class="eyebrow"></div>
-    <div id="leftEye" class="eye">
-      <div id="leftPupil" class="pupil"></div>
-    </div>
+    <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- RIGHT EYE -->
   <div class="eye-container">
     <div id="rightBrow" class="eyebrow"></div>
-    <div id="rightEye" class="eye">
-      <div id="rightPupil" class="pupil"></div>
-    </div>
+    <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
   </div>
 
+  <div id="debug">Looking for hand...</div>
   <video id="webcam" autoplay playsinline></video>
 
   <script>
@@ -90,12 +93,14 @@
     let greetingCooldown = false;
     let safetyWatchdog = null;
 
-    const leftEye   = document.getElementById('leftEye');
-    const rightEye  = document.getElementById('rightEye');
-    const leftPupil = document.getElementById('leftPupil');
-    const rightPupil= document.getElementById('rightPupil');
+    const leftEye    = document.getElementById('leftEye');
+    const rightEye   = document.getElementById('rightEye');
+    const leftPupil  = document.getElementById('leftPupil');
+    const rightPupil = document.getElementById('rightPupil');
+    const debugEl    = document.getElementById('debug');
     const videoElement = document.getElementById('webcam');
 
+    // ========== Bluetooth (still works in background) ==========
     async function connectBluetooth() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
@@ -106,43 +111,45 @@
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
         speak("Connected!");
+        debugEl.textContent = "BT Connected";
       } catch (e) {
-        console.log(e);
+        console.warn(e);
+        debugEl.textContent = "BT Failed (eyes still work)";
       }
     }
-
-    // Auto-connect attempt on load (optional)
+    // Uncomment next line if you want auto-connect on load
     // connectBluetooth();
 
     function sendCommand(cmd) {
       clearTimeout(safetyWatchdog);
-      
+
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
           const encoder = new TextEncoder();
-          txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
+          txCharacteristic.writeValue(encoder.encode(cmd)).catch(console.warn);
         }
         setExpression(cmd);
         lastCmd = cmd;
       }
 
+      // Auto-stop after 220ms of no hand
       if (cmd !== 'S') {
-        safetyWatchdog = setTimeout(() => sendCommand('S'), 200);
+        safetyWatchdog = setTimeout(() => sendCommand('S'), 220);
       }
     }
 
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.1;
-        window.speechSynthesis.speak(utterance);
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.0;
+        u.pitch = 1.1;
+        window.speechSynthesis.speak(u);
       }
     }
 
     function setExpression(cmd) {
-      // Reset base state
+      // Reset
       leftEye.style.height  = '190px';
       rightEye.style.height = '190px';
       leftPupil.style.transform  = 'none';
@@ -151,80 +158,74 @@
       if (cmd === 'L') {
         leftPupil.style.transform  = 'translateX(-26px)';
         rightPupil.style.transform = 'translateX(-26px)';
+        debugEl.textContent = "← LEFT (1 finger)";
       } 
       else if (cmd === 'R') {
         leftPupil.style.transform  = 'translateX(26px)';
         rightPupil.style.transform = 'translateX(26px)';
+        debugEl.textContent = "RIGHT → (2 fingers)";
       } 
       else if (cmd === 'F') {
         leftEye.style.height  = '145px';
         rightEye.style.height = '145px';
+        debugEl.textContent = "FORWARD (4+ fingers)";
       } 
       else if (cmd === 'B') {
         leftPupil.style.transform  = 'translateY(-22px)';
         rightPupil.style.transform = 'translateY(-22px)';
+        debugEl.textContent = "BACK (3 fingers)";
       } 
-      else { // Stop / Idle
+      else {
         leftPupil.style.transform  = 'translateY(12px)';
         rightPupil.style.transform = 'translateY(12px)';
+        debugEl.textContent = "STOP / Idle";
       }
     }
 
-    // Hand gesture recognition
+    // ========== Improved finger counting ==========
+    function countOpenFingers(landmarks) {
+      // Index, Middle, Ring, Pinky (tip y < pip y → open)
+      let count = 0;
+      if (landmarks[8].y  < landmarks[6].y)  count++; // Index
+      if (landmarks[12].y < landmarks[10].y) count++; // Middle
+      if (landmarks[16].y < landmarks[14].y) count++; // Ring
+      if (landmarks[20].y < landmarks[18].y) count++; // Pinky
+
+      // Thumb (simple & reliable for palm-facing camera)
+      // Tip is significantly farther from wrist than IP joint
+      const wrist = landmarks[0];
+      const thumbTip = landmarks[4];
+      const thumbIp  = landmarks[3];
+      const tipDist = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
+      const ipDist  = Math.hypot(thumbIp.x  - wrist.x, thumbIp.y  - wrist.y);
+      if (tipDist > ipDist * 1.25) count++; // thumb open
+
+      return count;
+    }
+
     function onHandResults(results) {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
-        let openFingers = 0;
-        
-        if (landmarks[8].y  < landmarks[6].y)  openFingers++;
-        if (landmarks[12].y < landmarks[10].y) openFingers++;
-        if (landmarks[16].y < landmarks[14].y) openFingers++;
-        if (landmarks[20].y < landmarks[18].y) openFingers++;
+        const open = countOpenFingers(landmarks);
 
-        if (openFingers >= 4)      sendCommand('F');
-        else if (openFingers === 3) sendCommand('B');
-        else if (openFingers === 2) sendCommand('R');
-        else if (openFingers === 1) sendCommand('L');
-        else                        sendCommand('S');
+        if (open >= 4)      sendCommand('F');
+        else if (open === 3) sendCommand('B');
+        else if (open === 2) sendCommand('R');
+        else if (open === 1) sendCommand('L');
+        else                 sendCommand('S');
       } else {
         sendCommand('S');
       }
     }
 
-    // Face detection greeting
     function onFaceResults(results) {
-      if (results.detections && results.detections.length > 0) {
-        if (!greetingCooldown) {
-          greetingCooldown = true;
-          speak("Welcome to symposium!");
-          setTimeout(() => greetingCooldown = false, 8000);
-        }
+      if (results.detections && results.detections.length > 0 && !greetingCooldown) {
+        greetingCooldown = true;
+        speak("Welcome to symposium!");
+        setTimeout(() => greetingCooldown = false, 8000);
       }
     }
 
-    // MediaPipe setup
-    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 0,
-      minDetectionConfidence: 0.4,
-      minTrackingConfidence: 0.4
-    });
-    hands.onResults(onHandResults);
-
-    const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
-    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.4 });
-    faceDetection.onResults(onFaceResults);
-
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({ image: videoElement });
-        await faceDetection.send({ image: videoElement });
-      },
-      width: 640,
-      height: 480
-    });
-    camera.start();
-  </script>
-</body>
-</html>
+    // ========== MediaPipe setup ==========
+    const hands = new Hands({
+      locateFile: (file) => 
