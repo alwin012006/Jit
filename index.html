@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Dual Eyes & Gesture Control</title>
+  <title>Fresher Bot - Dual Eyes & Fast Gesture Control</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -34,7 +34,7 @@
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- CENTER PANEL (BLE CONNECT & STATUS ONLY) -->
+  <!-- CENTER PANEL -->
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
     <button onclick="connectBluetooth()">Connect ESP32 📶</button>
@@ -52,6 +52,7 @@
     let bluetoothDevice, txCharacteristic;
     let lastCmd = '';
     let greetingCooldown = false;
+    let safetyWatchdog = null;
 
     const overlayText = document.getElementById('overlayText');
     const leftEye = document.getElementById('leftEye');
@@ -78,6 +79,9 @@
     }
 
     function sendCommand(cmd) {
+      // Reset safety timeout on every command processing
+      clearTimeout(safetyWatchdog);
+      
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
           let encoder = new TextEncoder();
@@ -85,6 +89,13 @@
         }
         setExpression(cmd);
         lastCmd = cmd;
+      }
+
+      // If active movement command is sent, force automatic stop if no frame updates within 250ms
+      if (cmd !== 'S') {
+        safetyWatchdog = setTimeout(() => {
+          sendCommand('S');
+        }, 250);
       }
     }
 
@@ -124,11 +135,12 @@
       }
     }
 
-    // Hand Gesture Recognition Callback
+    // Fast Hand Gesture Recognition Callback
     function onHandResults(results) {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
+        
         if (landmarks[8].y < landmarks[6].y) openFingers++;
         if (landmarks[12].y < landmarks[10].y) openFingers++;
         if (landmarks[16].y < landmarks[14].y) openFingers++;
@@ -140,6 +152,7 @@
         else if (openFingers === 1) sendCommand('L');
         else sendCommand('S');
       } else {
+        // Immediate hard stop when hand is out of frame
         sendCommand('S');
       }
     }
@@ -151,7 +164,6 @@
           greetingCooldown = true;
           speak("Welcome to symposium!");
           
-          // Cooldown for 8 seconds before triggering another greeting
           setTimeout(() => {
             greetingCooldown = false;
           }, 8000);
@@ -159,12 +171,13 @@
       }
     }
 
+    // High Speed Low-Latency MediaPipe Config
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.4, minTrackingConfidence: 0.4 });
     hands.onResults(onHandResults);
 
     const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
-    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
+    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.4 });
     faceDetection.onResults(onFaceResults);
 
     const camera = new Camera(videoElement, {
