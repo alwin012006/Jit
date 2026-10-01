@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Motion Detection Edition</title>
+  <title>Fresher Bot - College Symposium Edition</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -57,6 +57,7 @@
     let currentMode = 'GESTURE';
     let lastCmd = '';
     let prevFrameData = null;
+    let greetingCooldown = false;
 
     const overlayText = document.getElementById('overlayText');
     const motionStatus = document.getElementById('motionStatus');
@@ -102,6 +103,7 @@
         window.speechSynthesis.cancel();
         let utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
+        utterance.pitch = 1.1;
         window.speechSynthesis.speak(utterance);
       }
     }
@@ -153,7 +155,7 @@
 
       if (prevFrameData) {
         let diff = 0;
-        for (let i = 0; i < data.length; i += 16) { // Sample pixels for efficiency
+        for (let i = 0; i < data.length; i += 16) {
           const rDiff = Math.abs(data[i] - prevFrameData[i]);
           const gDiff = Math.abs(data[i + 1] - prevFrameData[i + 1]);
           const bDiff = Math.abs(data[i + 2] - prevFrameData[i + 2]);
@@ -163,6 +165,17 @@
         if (diff > 120) {
           motionStatus.innerText = "Motion: Detected! ⚡";
           motionStatus.style.color = "#00ff66";
+
+          // Trigger "Welcome to Symposium" greeting when motion is detected
+          if (!greetingCooldown) {
+            greetingCooldown = true;
+            speak("Welcome to symposium!");
+            
+            // Cooldown for 8 seconds before triggering another greeting
+            setTimeout(() => {
+              greetingCooldown = false;
+            }, 8000);
+          }
         } else {
           motionStatus.innerText = "Motion: Idle";
           motionStatus.style.color = "#ff0077";
@@ -171,6 +184,7 @@
       prevFrameData = data;
     }
 
+    // Hand Gesture Recognition Callback
     function onHandResults(results) {
       if (currentMode !== 'GESTURE') return;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
@@ -191,6 +205,7 @@
       }
     }
 
+    // Human Follower Face Callback
     function onFaceResults(results) {
       if (currentMode !== 'FOLLOWER') return;
       if (results.detections && results.detections.length > 0) {
