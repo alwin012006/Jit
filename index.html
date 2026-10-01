@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Dance & Reverse Edition</title>
+  <title>Fresher Bot - Motion Detection Edition</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -22,10 +22,10 @@
     .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
     #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 38vw; z-index: 10; }
     #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
-    #voiceStatus { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
+    #motionStatus { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
     .btn-group { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 170px; }
-    button { padding: 7px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
-    video { display: none; }
+    button { padding: 8px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
+    video, canvas { display: none; }
   </style>
 </head>
 <body>
@@ -37,12 +37,10 @@
 
   <div id="centerControlPanel">
     <div id="overlayText">Status: Disconnected</div>
-    <div id="voiceStatus">Mic: Off</div>
+    <div id="motionStatus">Motion: Idle</div>
     <div class="btn-group">
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
-      <button onclick="startVoiceRecognition()" id="micBtn">Enable Voice 🎤</button>
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
-      <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
     </div>
   </div>
 
@@ -52,20 +50,24 @@
   </div>
 
   <video id="webcam" autoplay playsinline></video>
+  <canvas id="motionCanvas" width="160" height="120"></canvas>
 
   <script>
     let bluetoothDevice, txCharacteristic;
     let currentMode = 'GESTURE';
     let lastCmd = '';
-    let isDancing = false;
-    let voiceOverrideStop = false;
+    let prevFrameData = null;
 
     const overlayText = document.getElementById('overlayText');
-    const voiceStatus = document.getElementById('voiceStatus');
+    const motionStatus = document.getElementById('motionStatus');
     const leftEye = document.getElementById('leftEye');
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
+    const videoElement = document.getElementById('webcam');
+    
+    const motionCanvas = document.getElementById('motionCanvas');
+    const motionCtx = motionCanvas.getContext('2d');
 
     async function connectBluetooth() {
       try {
@@ -85,23 +87,14 @@
     }
 
     function sendCommand(cmd) {
-      if (isDancing) return;
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
           let encoder = new TextEncoder();
-          txCharacteristic.writeValue(encoder.encode(cmd));
+          txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
         }
         setExpression(cmd);
         lastCmd = cmd;
       }
-    }
-
-    function sendDirectCommand(cmd) {
-      if (txCharacteristic) {
-        let encoder = new TextEncoder();
-        txCharacteristic.writeValue(encoder.encode(cmd));
-      }
-      setExpression(cmd);
     }
 
     function speak(text) {
@@ -113,74 +106,7 @@
       }
     }
 
-    function triggerDance() {
-      isDancing = true;
-      overlayText.innerText = "PARTY TIME! 💃";
-      speak("Let's dance freshers!");
-      
-      let moves = ['L', 'R', 'L', 'R', 'B', 'F', 'S'];
-      let i = 0;
-      let interval = setInterval(() => {
-        if (i < moves.length) {
-          sendDirectCommand(moves[i]);
-          i++;
-        } else {
-          clearInterval(interval);
-          isDancing = false;
-          overlayText.innerText = "Status: Ready";
-        }
-      }, 600);
-    }
-
-    function startVoiceRecognition() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) return alert("Speech API not supported.");
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => {
-        voiceStatus.innerText = "Mic: Listening...";
-        document.getElementById('micBtn').style.backgroundColor = "#ff0077";
-      };
-
-      recognition.onresult = (event) => {
-        const lastIndex = event.results.length - 1;
-        const text = event.results[lastIndex][0].transcript.toLowerCase().trim();
-        voiceStatus.innerText = `Heard: "${text}"`;
-
-        if (text.includes("stop") || text.includes("wait")) {
-          voiceOverrideStop = true;
-          sendCommand('S');
-          setTimeout(() => { voiceOverrideStop = false; }, 3000);
-        } else if (text.includes("forward") || text.includes("go")) {
-          voiceOverrideStop = false;
-          sendCommand('F');
-        } else if (text.includes("back") || text.includes("reverse")) {
-          voiceOverrideStop = false;
-          sendCommand('B');
-        } else if (text.includes("left")) {
-          voiceOverrideStop = false;
-          sendCommand('L');
-        } else if (text.includes("right")) {
-          voiceOverrideStop = false;
-          sendCommand('R');
-        } else if (text.includes("dance") || text.includes("party")) {
-          triggerDance();
-        } else if (text.includes("follow")) {
-          voiceOverrideStop = false;
-          currentMode = 'FOLLOWER';
-          document.getElementById('modeBtn').innerText = "Mode: Follower";
-        }
-      };
-
-      recognition.onend = () => { recognition.start(); };
-      recognition.start();
-    }
-
     function toggleMode() {
-      voiceOverrideStop = false;
       if (currentMode === 'GESTURE') {
         currentMode = 'FOLLOWER';
         document.getElementById('modeBtn').innerText = "Mode: Follower";
@@ -188,6 +114,7 @@
         currentMode = 'GESTURE';
         document.getElementById('modeBtn').innerText = "Mode: Gesture";
       }
+      sendCommand('S');
     }
 
     function setExpression(cmd) {
@@ -216,10 +143,36 @@
       }
     }
 
-    const videoElement = document.getElementById('webcam');
+    // Motion Detection Logic via Frame Differencing
+    function detectMotion() {
+      if (videoElement.readyState !== 4) return;
+      
+      motionCtx.drawImage(videoElement, 0, 0, motionCanvas.width, motionCanvas.height);
+      const currentFrame = motionCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+      const data = currentFrame.data;
+
+      if (prevFrameData) {
+        let diff = 0;
+        for (let i = 0; i < data.length; i += 16) { // Sample pixels for efficiency
+          const rDiff = Math.abs(data[i] - prevFrameData[i]);
+          const gDiff = Math.abs(data[i + 1] - prevFrameData[i + 1]);
+          const bDiff = Math.abs(data[i + 2] - prevFrameData[i + 2]);
+          if (rDiff + gDiff + bDiff > 100) diff++;
+        }
+
+        if (diff > 120) {
+          motionStatus.innerText = "Motion: Detected! ⚡";
+          motionStatus.style.color = "#00ff66";
+        } else {
+          motionStatus.innerText = "Motion: Idle";
+          motionStatus.style.color = "#ff0077";
+        }
+      }
+      prevFrameData = data;
+    }
 
     function onHandResults(results) {
-      if (currentMode !== 'GESTURE' || isDancing || voiceOverrideStop) return;
+      if (currentMode !== 'GESTURE') return;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
@@ -239,7 +192,7 @@
     }
 
     function onFaceResults(results) {
-      if (currentMode !== 'FOLLOWER' || isDancing || voiceOverrideStop) return;
+      if (currentMode !== 'FOLLOWER') return;
       if (results.detections && results.detections.length > 0) {
         const detection = results.detections[0];
         const faceCenterX = 1.0 - detection.boundingBox.xCenter;
@@ -262,6 +215,7 @@
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
+        detectMotion();
         if (currentMode === 'GESTURE') await hands.send({ image: videoElement });
         if (currentMode === 'FOLLOWER') await faceDetection.send({ image: videoElement });
       },
