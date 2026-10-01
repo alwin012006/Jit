@@ -26,23 +26,36 @@
     .btn-group { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 170px; }
     button { padding: 7px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
     
-    /* Remote Pad Styling */
-    .dpad-container {
+    /* Dedicated Remote Control Modal Modal */
+    #remoteModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100dvh;
+      background: rgba(5, 5, 8, 0.95);
+      z-index: 999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+    .dpad-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-      width: 100%;
-      max-width: 170px;
-      margin-top: 4px;
+      grid-template-columns: repeat(3, 70px);
+      grid-template-rows: repeat(3, 70px);
+      gap: 10px;
     }
     .dpad-btn {
-      padding: 8px 0;
-      font-size: 12px;
-      border-radius: 8px;
+      font-size: 20px;
+      font-weight: bold;
+      border-radius: 15px;
       background-color: #1a1a2e;
       color: #00f0ff;
-      border: 1px solid #00f0ff;
-      transition: background-color 0.1s;
+      border: 2px solid #00f0ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
     }
     .dpad-btn:active {
       background-color: #00f0ff;
@@ -53,9 +66,13 @@
       color: #fff;
       border-color: #ff0077;
     }
-    .dpad-stop:active {
-      background-color: #fff;
-      color: #ff0077;
+    .close-remote-btn {
+      padding: 10px 20px;
+      background-color: #ff0077;
+      color: white;
+      font-size: 14px;
+      border-radius: 20px;
+      margin-top: 10px;
     }
     
     video { display: none; }
@@ -75,21 +92,26 @@
       <button onclick="connectBluetooth()">Connect ESP32 📶</button>
       <button onclick="startVoiceRecognition()" id="micBtn">Enable Voice 🎤</button>
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
+      <button onclick="openRemoteModal()" style="background-color: #ffe600; color: #000;">Remote Drive 🎮</button>
       <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
     </div>
+  </div>
 
-    <!-- D-Pad Directional Remote Control -->
-    <div class="dpad-container">
+  <!-- Fullscreen Remote Control Overlay -->
+  <div id="remoteModal">
+    <h3 style="color: #00f0ff; margin: 0;">Manual Controller</h3>
+    <div class="dpad-grid">
       <div></div>
       <button class="dpad-btn" onclick="manualDrive('F')">▲</button>
       <div></div>
       <button class="dpad-btn" onclick="manualDrive('L')">◄</button>
-      <button class="dpad-btn dpad-stop" onclick="manualDrive('S')">■</button>
+      <button class="dpad-btn dpad-stop" onclick="manualDrive('S')">STOP</button>
       <button class="dpad-btn" onclick="manualDrive('R')">►</button>
       <div></div>
       <button class="dpad-btn" onclick="manualDrive('B')">▼</button>
       <div></div>
     </div>
+    <button class="close-remote-btn" onclick="closeRemoteModal()">Close Controller ✖</button>
   </div>
 
   <div class="eye-container">
@@ -112,6 +134,7 @@
     const rightEye = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
+    const remoteModal = document.getElementById('remoteModal');
 
     async function connectBluetooth() {
       try {
@@ -128,6 +151,17 @@
         console.log(e);
         overlayText.innerText = "Connection Failed";
       }
+    }
+
+    function openRemoteModal() {
+      currentMode = 'REMOTE';
+      document.getElementById('modeBtn').innerText = "Mode: Remote";
+      remoteModal.style.display = 'flex';
+    }
+
+    function closeRemoteModal() {
+      remoteModal.style.display = 'none';
+      manualDrive('S');
     }
 
     function sendCommand(cmd) {
@@ -152,11 +186,6 @@
 
     function manualDrive(cmd) {
       voiceOverrideStop = false;
-      // Switch mode to REMOTE on button press so computer vision doesn't immediately overwrite the command
-      if (currentMode !== 'REMOTE') {
-        currentMode = 'REMOTE';
-        document.getElementById('modeBtn').innerText = "Mode: Remote";
-      }
       sendCommand(cmd);
     }
 
