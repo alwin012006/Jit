@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Fresher Bot - Eyes Only</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fresher Bot - Smooth Eyes</title>
 
+  <!-- Pinned stable versions -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/face_detection.js" crossorigin="anonymous"></script>
@@ -21,7 +22,6 @@
       gap: 11vw;
       overflow: hidden;
       font-family: system-ui, sans-serif;
-      position: relative;
     }
     .eye-container {
       display: flex;
@@ -58,114 +58,72 @@
     }
     video { display: none; }
 
-    #startBtn {
+    /* Tiny debug (remove later if you want pure eyes) */
+    #debug {
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      padding: 18px 36px;
-      font-size: 18px;
-      font-weight: bold;
-      background: #00f0ff;
-      color: #000;
-      border: none;
-      border-radius: 40px;
-      cursor: pointer;
-      box-shadow: 0 0 30px #00f0ff;
-      z-index: 100;
-    }
-    #startBtn:hover { transform: translate(-50%, -50%) scale(1.05); }
-
-    #status {
-      position: fixed;
-      bottom: 20px;
+      bottom: 12px;
       left: 50%;
       transform: translateX(-50%);
       color: #00f0ff;
-      font-size: 15px;
-      font-weight: 600;
+      font-size: 13px;
+      opacity: 0.7;
+      pointer-events: none;
       text-align: center;
-      background: rgba(0,0,0,0.6);
-      padding: 8px 20px;
-      border-radius: 20px;
-      z-index: 50;
     }
   </style>
 </head>
 <body>
 
-  <!-- LEFT EYE -->
   <div class="eye-container">
-    <div class="eyebrow"></div>
+    <div id="leftBrow" class="eyebrow"></div>
     <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
   </div>
 
-  <!-- RIGHT EYE -->
   <div class="eye-container">
-    <div class="eyebrow"></div>
+    <div id="rightBrow" class="eyebrow"></div>
     <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
   </div>
 
-  <button id="startBtn">▶ Start Camera</button>
-  <div id="status">Click the button to begin</div>
-
-  <video id="webcam" autoplay playsinline muted></video>
+  <div id="debug">Looking for hand...</div>
+  <video id="webcam" autoplay playsinline></video>
 
   <script>
+    let bluetoothDevice, txCharacteristic;
+    let lastCmd = '';
+    let greetingCooldown = false;
+    let safetyWatchdog = null;
+
     const leftEye    = document.getElementById('leftEye');
     const rightEye   = document.getElementById('rightEye');
     const leftPupil  = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
-    const statusEl   = document.getElementById('status');
-    const startBtn   = document.getElementById('startBtn');
+    const debugEl    = document.getElementById('debug');
     const videoElement = document.getElementById('webcam');
 
-    let lastCmd = '';
-    let safetyWatchdog = null;
-    let greetingCooldown = false;
-    let bluetoothDevice, txCharacteristic;
-
-    // ========== Eye Expression ==========
-    function setExpression(cmd) {
-      // Reset
-      leftEye.style.height  = '190px';
-      rightEye.style.height = '190px';
-      leftPupil.style.transform  = 'none';
-      rightPupil.style.transform = 'none';
-
-      if (cmd === 'L') {
-        leftPupil.style.transform  = 'translateX(-28px)';
-        rightPupil.style.transform = 'translateX(-28px)';
-        statusEl.textContent = "← LEFT";
-      } 
-      else if (cmd === 'R') {
-        leftPupil.style.transform  = 'translateX(28px)';
-        rightPupil.style.transform = 'translateX(28px)';
-        statusEl.textContent = "RIGHT →";
-      } 
-      else if (cmd === 'F') {
-        leftEye.style.height  = '140px';
-        rightEye.style.height = '140px';
-        statusEl.textContent = "FORWARD ▲";
-      } 
-      else if (cmd === 'B') {
-        leftPupil.style.transform  = 'translateY(-24px)';
-        rightPupil.style.transform = 'translateY(-24px)';
-        statusEl.textContent = "BACK ▼";
-      } 
-      else {
-        leftPupil.style.transform  = 'translateY(14px)';
-        rightPupil.style.transform = 'translateY(14px)';
-        statusEl.textContent = "STOP / Idle";
+    // ========== Bluetooth (still works in background) ==========
+    async function connectBluetooth() {
+      try {
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'Fresher_Bot_BT' }],
+          optionalServices: ['49535343-fe7d-4ae5-8fa9-9fafd205e455']
+        });
+        const server = await bluetoothDevice.gatt.connect();
+        const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
+        txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
+        speak("Connected!");
+        debugEl.textContent = "BT Connected";
+      } catch (e) {
+        console.warn(e);
+        debugEl.textContent = "BT Failed (eyes still work)";
       }
     }
+    // Uncomment next line if you want auto-connect on load
+    // connectBluetooth();
 
-    // ========== Command Sender ==========
     function sendCommand(cmd) {
       clearTimeout(safetyWatchdog);
 
       if (cmd !== lastCmd) {
-        // Bluetooth (optional)
         if (txCharacteristic) {
           const encoder = new TextEncoder();
           txCharacteristic.writeValue(encoder.encode(cmd)).catch(console.warn);
@@ -174,32 +132,81 @@
         lastCmd = cmd;
       }
 
+      // Auto-stop after 220ms of no hand
       if (cmd !== 'S') {
-        safetyWatchdog = setTimeout(() => sendCommand('S'), 250);
+        safetyWatchdog = setTimeout(() => sendCommand('S'), 220);
       }
     }
 
-    // ========== Finger Counter ==========
-    function countOpenFingers(landmarks) {
-      let count = 0;
-      // Index, Middle, Ring, Pinky
-      if (landmarks[8].y  < landmarks[6].y)  count++;
-      if (landmarks[12].y < landmarks[10].y) count++;
-      if (landmarks[16].y < landmarks[14].y) count++;
-      if (landmarks[20].y < landmarks[18].y) count++;
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.0;
+        u.pitch = 1.1;
+        window.speechSynthesis.speak(u);
+      }
+    }
 
-      // Thumb (distance method - more reliable)
-      const tipDist = Math.hypot(landmarks[4].x - landmarks[0].x, landmarks[4].y - landmarks[0].y);
-      const ipDist  = Math.hypot(landmarks[3].x - landmarks[0].x, landmarks[3].y - landmarks[0].y);
-      if (tipDist > ipDist * 1.2) count++;
+    function setExpression(cmd) {
+      // Reset
+      leftEye.style.height  = '190px';
+      rightEye.style.height = '190px';
+      leftPupil.style.transform  = 'none';
+      rightPupil.style.transform = 'none';
+
+      if (cmd === 'L') {
+        leftPupil.style.transform  = 'translateX(-26px)';
+        rightPupil.style.transform = 'translateX(-26px)';
+        debugEl.textContent = "← LEFT (1 finger)";
+      } 
+      else if (cmd === 'R') {
+        leftPupil.style.transform  = 'translateX(26px)';
+        rightPupil.style.transform = 'translateX(26px)';
+        debugEl.textContent = "RIGHT → (2 fingers)";
+      } 
+      else if (cmd === 'F') {
+        leftEye.style.height  = '145px';
+        rightEye.style.height = '145px';
+        debugEl.textContent = "FORWARD (4+ fingers)";
+      } 
+      else if (cmd === 'B') {
+        leftPupil.style.transform  = 'translateY(-22px)';
+        rightPupil.style.transform = 'translateY(-22px)';
+        debugEl.textContent = "BACK (3 fingers)";
+      } 
+      else {
+        leftPupil.style.transform  = 'translateY(12px)';
+        rightPupil.style.transform = 'translateY(12px)';
+        debugEl.textContent = "STOP / Idle";
+      }
+    }
+
+    // ========== Improved finger counting ==========
+    function countOpenFingers(landmarks) {
+      // Index, Middle, Ring, Pinky (tip y < pip y → open)
+      let count = 0;
+      if (landmarks[8].y  < landmarks[6].y)  count++; // Index
+      if (landmarks[12].y < landmarks[10].y) count++; // Middle
+      if (landmarks[16].y < landmarks[14].y) count++; // Ring
+      if (landmarks[20].y < landmarks[18].y) count++; // Pinky
+
+      // Thumb (simple & reliable for palm-facing camera)
+      // Tip is significantly farther from wrist than IP joint
+      const wrist = landmarks[0];
+      const thumbTip = landmarks[4];
+      const thumbIp  = landmarks[3];
+      const tipDist = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
+      const ipDist  = Math.hypot(thumbIp.x  - wrist.x, thumbIp.y  - wrist.y);
+      if (tipDist > ipDist * 1.25) count++; // thumb open
 
       return count;
     }
 
-    // ========== Hand Results ==========
     function onHandResults(results) {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const open = countOpenFingers(results.multiHandLandmarks[0]);
+        const landmarks = results.multiHandLandmarks[0];
+        const open = countOpenFingers(landmarks);
 
         if (open >= 4)      sendCommand('F');
         else if (open === 3) sendCommand('B');
@@ -211,94 +218,59 @@
       }
     }
 
-    // ========== Face Greeting ==========
     function onFaceResults(results) {
-      if (results.detections?.length > 0 && !greetingCooldown) {
+      if (results.detections && results.detections.length > 0 && !greetingCooldown) {
         greetingCooldown = true;
-        if ('speechSynthesis' in window) {
-          const u = new SpeechSynthesisUtterance("Welcome to symposium!");
-          window.speechSynthesis.speak(u);
-        }
+        speak("Welcome to symposium!");
         setTimeout(() => greetingCooldown = false, 8000);
       }
     }
 
-    // ========== Demo Animation (proves eyes work) ==========
-    async function runDemo() {
-      const sequence = ['L', 'R', 'F', 'B', 'S'];
-      for (const cmd of sequence) {
-        setExpression(cmd);
-        await new Promise(r => setTimeout(r, 700));
-      }
-    }
+    // ========== MediaPipe setup ==========
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,          // better accuracy
+      minDetectionConfidence: 0.55,
+      minTrackingConfidence: 0.5,
+      selfieMode: true             // mirrored (more natural)
+    });
+    hands.onResults(onHandResults);
 
-    // ========== Start Everything ==========
-    startBtn.addEventListener('click', async () => {
-      startBtn.style.display = 'none';
-      statusEl.textContent = "Starting camera...";
+    const faceDetection = new FaceDetection({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`
+    });
+    faceDetection.setOptions({
+      modelSelection: 0,
+      minDetectionConfidence: 0.5
+    });
+    faceDetection.onResults(onFaceResults);
 
-      // Initialize MediaPipe
-      const hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
-      });
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5,
-        selfieMode: true
-      });
-      hands.onResults(onHandResults);
-
-      const faceDetection = new FaceDetection({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`
-      });
-      faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
-      faceDetection.onResults(onFaceResults);
-
-      // Start camera
-      const camera = new Camera(videoElement, {
-        onFrame: async () => {
-          await hands.send({ image: videoElement });
-          if (Math.random() < 0.1) {
-            await faceDetection.send({ image: videoElement });
-          }
-        },
-        width: 640,
-        height: 480
-      });
-
-      try {
-        await camera.start();
-        statusEl.textContent = "Camera ready! Show your hand";
-        console.log("✓ Camera + Hands started");
-
-        // Run demo so you can see the eyes move
-        await runDemo();
-        statusEl.textContent = "Show hand: 1=Left  2=Right  3=Back  4+=Forward";
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "Camera error! Allow permission & use HTTPS/localhost";
-        startBtn.style.display = 'block';
-        startBtn.textContent = "Try Again";
-      }
+    // Start camera
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+        // Face detection only every ~8 frames to save CPU
+        if (Math.random() < 0.12) {
+          await faceDetection.send({ image: videoElement });
+        }
+      },
+      width: 640,
+      height: 480
     });
 
-    // Optional Bluetooth (call connectBluetooth() from console if needed)
-    async function connectBluetooth() {
-      try {
-        bluetoothDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ name: 'Fresher_Bot_BT' }],
-          optionalServices: ['49535343-fe7d-4ae5-8fa9-9fafd205e455']
-        });
-        const server = await bluetoothDevice.gatt.connect();
-        const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
-        txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
-        statusEl.textContent = "Bluetooth Connected!";
-      } catch (e) {
-        console.warn(e);
-      }
-    }
+    camera.start()
+      .then(() => {
+        debugEl.textContent = "Camera ready – show hand";
+        console.log("Camera + Hands started successfully");
+      })
+      .catch(err => {
+        console.error(err);
+        debugEl.textContent = "Camera permission denied or not HTTPS";
+        alert("Please allow camera access and open this page via https:// or localhost");
+      });
   </script>
 </body>
 </html>
