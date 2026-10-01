@@ -25,6 +25,39 @@
     #voiceStatus { color: #ff0077; font-size: 11px; font-weight: bold; text-align: center; }
     .btn-group { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 170px; }
     button { padding: 7px; font-size: 11px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; }
+    
+    /* Remote Pad Styling */
+    .dpad-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      width: 100%;
+      max-width: 170px;
+      margin-top: 4px;
+    }
+    .dpad-btn {
+      padding: 8px 0;
+      font-size: 12px;
+      border-radius: 8px;
+      background-color: #1a1a2e;
+      color: #00f0ff;
+      border: 1px solid #00f0ff;
+      transition: background-color 0.1s;
+    }
+    .dpad-btn:active {
+      background-color: #00f0ff;
+      color: #000;
+    }
+    .dpad-stop {
+      background-color: #ff0077;
+      color: #fff;
+      border-color: #ff0077;
+    }
+    .dpad-stop:active {
+      background-color: #fff;
+      color: #ff0077;
+    }
+    
     video { display: none; }
   </style>
 </head>
@@ -44,6 +77,19 @@
       <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
       <button onclick="triggerDance()" style="background-color: #ff0077; color: #fff;">Dance Routine 💃</button>
     </div>
+
+    <!-- D-Pad Directional Remote Control -->
+    <div class="dpad-container">
+      <div></div>
+      <button class="dpad-btn" onclick="manualDrive('F')">▲</button>
+      <div></div>
+      <button class="dpad-btn" onclick="manualDrive('L')">◄</button>
+      <button class="dpad-btn dpad-stop" onclick="manualDrive('S')">■</button>
+      <button class="dpad-btn" onclick="manualDrive('R')">►</button>
+      <div></div>
+      <button class="dpad-btn" onclick="manualDrive('B')">▼</button>
+      <div></div>
+    </div>
   </div>
 
   <div class="eye-container">
@@ -55,7 +101,7 @@
 
   <script>
     let bluetoothDevice, txCharacteristic;
-    let currentMode = 'GESTURE';
+    let currentMode = 'GESTURE'; // Options: 'GESTURE', 'FOLLOWER', 'REMOTE'
     let lastCmd = '';
     let isDancing = false;
     let voiceOverrideStop = false;
@@ -102,6 +148,16 @@
         txCharacteristic.writeValue(encoder.encode(cmd));
       }
       setExpression(cmd);
+    }
+
+    function manualDrive(cmd) {
+      voiceOverrideStop = false;
+      // Switch mode to REMOTE on button press so computer vision doesn't immediately overwrite the command
+      if (currentMode !== 'REMOTE') {
+        currentMode = 'REMOTE';
+        document.getElementById('modeBtn').innerText = "Mode: Remote";
+      }
+      sendCommand(cmd);
     }
 
     function speak(text) {
@@ -184,6 +240,9 @@
       if (currentMode === 'GESTURE') {
         currentMode = 'FOLLOWER';
         document.getElementById('modeBtn').innerText = "Mode: Follower";
+      } else if (currentMode === 'FOLLOWER') {
+        currentMode = 'REMOTE';
+        document.getElementById('modeBtn').innerText = "Mode: Remote";
       } else {
         currentMode = 'GESTURE';
         document.getElementById('modeBtn').innerText = "Mode: Gesture";
