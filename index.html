@@ -3,26 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Dual Eyes & Fast Gesture Control</title>
+  <title>Fresher Bot - Eyes Only</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
 
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      background-color: #050508; margin: 0; padding: 10px 15px;
-      display: flex; justify-content: space-between; align-items: center;
-      height: 100dvh; width: 100vw; font-family: sans-serif; overflow: hidden;
+      background-color: #050508;
+      height: 100dvh;
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12vw;
+      overflow: hidden;
+      font-family: sans-serif;
     }
-    .eye-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 28vw; }
-    .eyebrow { width: 110px; height: 10px; background-color: #00f0ff; border-radius: 5px; box-shadow: 0 0 12px #00f0ff; }
-    .eye { width: 125px; height: 155px; background-color: #00f0ff; border-radius: 65px; position: relative; box-shadow: 0 0 25px #00f0ff; transition: all 0.2s; }
-    .pupil { width: 42px; height: 42px; background-color: #050508; border-radius: 50%; position: absolute; top: 56px; left: 41px; transition: all 0.2s; }
-    #centerControlPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 38vw; z-index: 10; }
-    #overlayText { color: #00f0ff; font-size: 15px; font-weight: bold; text-align: center; }
-    button { padding: 10px 18px; font-size: 12px; font-weight: bold; color: #000; background-color: #00f0ff; border: none; border-radius: 15px; cursor: pointer; box-shadow: 0 0 12px rgba(0, 240, 255, 0.4); }
+
+    .eye-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .eyebrow {
+      width: 140px;
+      height: 12px;
+      background-color: #00f0ff;
+      border-radius: 6px;
+      box-shadow: 0 0 18px #00f0ff;
+      transition: all 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .eye {
+      width: 155px;
+      height: 190px;
+      background-color: #00f0ff;
+      border-radius: 80px;
+      position: relative;
+      box-shadow: 0 0 35px #00f0ff;
+      transition: all 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .pupil {
+      width: 52px;
+      height: 52px;
+      background-color: #050508;
+      border-radius: 50%;
+      position: absolute;
+      top: 69px;
+      left: 51.5px;
+      transition: transform 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
     video { display: none; }
   </style>
 </head>
@@ -31,19 +69,17 @@
   <!-- LEFT EYE -->
   <div class="eye-container">
     <div id="leftBrow" class="eyebrow"></div>
-    <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
-  </div>
-
-  <!-- CENTER PANEL (ONLY CONNECT BUTTON & STATUS) -->
-  <div id="centerControlPanel">
-    <div id="overlayText">Status: Disconnected</div>
-    <button onclick="connectBluetooth()">Connect ESP32 📶</button>
+    <div id="leftEye" class="eye">
+      <div id="leftPupil" class="pupil"></div>
+    </div>
   </div>
 
   <!-- RIGHT EYE -->
   <div class="eye-container">
     <div id="rightBrow" class="eyebrow"></div>
-    <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
+    <div id="rightEye" class="eye">
+      <div id="rightPupil" class="pupil"></div>
+    </div>
   </div>
 
   <video id="webcam" autoplay playsinline></video>
@@ -54,11 +90,10 @@
     let greetingCooldown = false;
     let safetyWatchdog = null;
 
-    const overlayText = document.getElementById('overlayText');
-    const leftEye = document.getElementById('leftEye');
-    const rightEye = document.getElementById('rightEye');
+    const leftEye   = document.getElementById('leftEye');
+    const rightEye  = document.getElementById('rightEye');
     const leftPupil = document.getElementById('leftPupil');
-    const rightPupil = document.getElementById('rightPupil');
+    const rightPupil= document.getElementById('rightPupil');
     const videoElement = document.getElementById('webcam');
 
     async function connectBluetooth() {
@@ -70,39 +105,36 @@
         const server = await bluetoothDevice.gatt.connect();
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
-        overlayText.innerText = "Status: Connected!";
         speak("Connected!");
       } catch (e) {
         console.log(e);
-        overlayText.innerText = "Connection Failed";
       }
     }
 
+    // Auto-connect attempt on load (optional)
+    // connectBluetooth();
+
     function sendCommand(cmd) {
-      // Reset watchdog on every received frame command
       clearTimeout(safetyWatchdog);
       
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
-          let encoder = new TextEncoder();
+          const encoder = new TextEncoder();
           txCharacteristic.writeValue(encoder.encode(cmd)).catch(err => console.log(err));
         }
         setExpression(cmd);
         lastCmd = cmd;
       }
 
-      // Instant Auto-Stop: If no hand is detected for 200ms, force STOP command ('S')
       if (cmd !== 'S') {
-        safetyWatchdog = setTimeout(() => {
-          sendCommand('S');
-        }, 200);
+        safetyWatchdog = setTimeout(() => sendCommand('S'), 200);
       }
     }
 
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        let utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
         utterance.pitch = 1.1;
         window.speechSynthesis.speak(utterance);
@@ -110,70 +142,74 @@
     }
 
     function setExpression(cmd) {
-      leftEye.style.height = '155px'; rightEye.style.height = '155px';
-      leftPupil.style.transform = 'none'; rightPupil.style.transform = 'none';
+      // Reset base state
+      leftEye.style.height  = '190px';
+      rightEye.style.height = '190px';
+      leftPupil.style.transform  = 'none';
+      rightPupil.style.transform = 'none';
 
       if (cmd === 'L') {
-        overlayText.innerText = "Turning Left";
-        leftPupil.style.transform = 'translateX(-20px)';
-        rightPupil.style.transform = 'translateX(-20px)';
-      } else if (cmd === 'R') {
-        overlayText.innerText = "Turning Right";
-        leftPupil.style.transform = 'translateX(20px)';
-        rightPupil.style.transform = 'translateX(20px)';
-      } else if (cmd === 'F') {
-        overlayText.innerText = "Moving Forward";
-        leftEye.style.height = '125px'; rightEye.style.height = '125px';
-      } else if (cmd === 'B') {
-        overlayText.innerText = "Reversing Back";
-        leftPupil.style.transform = 'translateY(-15px)';
-        rightPupil.style.transform = 'translateY(-15px)';
-      } else {
-        overlayText.innerText = "Idle / Stop";
-        leftPupil.style.transform = 'translateY(10px)';
-        rightPupil.style.transform = 'translateY(10px)';
+        leftPupil.style.transform  = 'translateX(-26px)';
+        rightPupil.style.transform = 'translateX(-26px)';
+      } 
+      else if (cmd === 'R') {
+        leftPupil.style.transform  = 'translateX(26px)';
+        rightPupil.style.transform = 'translateX(26px)';
+      } 
+      else if (cmd === 'F') {
+        leftEye.style.height  = '145px';
+        rightEye.style.height = '145px';
+      } 
+      else if (cmd === 'B') {
+        leftPupil.style.transform  = 'translateY(-22px)';
+        rightPupil.style.transform = 'translateY(-22px)';
+      } 
+      else { // Stop / Idle
+        leftPupil.style.transform  = 'translateY(12px)';
+        rightPupil.style.transform = 'translateY(12px)';
       }
     }
 
-    // Fast Hand Gesture Recognition Callback
+    // Hand gesture recognition
     function onHandResults(results) {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         let openFingers = 0;
         
-        if (landmarks[8].y < landmarks[6].y) openFingers++;
+        if (landmarks[8].y  < landmarks[6].y)  openFingers++;
         if (landmarks[12].y < landmarks[10].y) openFingers++;
         if (landmarks[16].y < landmarks[14].y) openFingers++;
         if (landmarks[20].y < landmarks[18].y) openFingers++;
 
-        if (openFingers >= 4) sendCommand('F');
+        if (openFingers >= 4)      sendCommand('F');
         else if (openFingers === 3) sendCommand('B');
         else if (openFingers === 2) sendCommand('R');
         else if (openFingers === 1) sendCommand('L');
-        else sendCommand('S');
+        else                        sendCommand('S');
       } else {
-        // Immediate hard stop when hand is removed from view
         sendCommand('S');
       }
     }
 
-    // Face Detection Visitor Greeting Callback
+    // Face detection greeting
     function onFaceResults(results) {
       if (results.detections && results.detections.length > 0) {
         if (!greetingCooldown) {
           greetingCooldown = true;
           speak("Welcome to symposium!");
-          
-          setTimeout(() => {
-            greetingCooldown = false;
-          }, 8000);
+          setTimeout(() => greetingCooldown = false, 8000);
         }
       }
     }
 
-    // High Speed Low-Latency MediaPipe Config
+    // MediaPipe setup
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.4, minTrackingConfidence: 0.4 });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 0,
+      minDetectionConfidence: 0.4,
+      minTrackingConfidence: 0.4
+    });
     hands.onResults(onHandResults);
 
     const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
@@ -185,7 +221,8 @@
         await hands.send({ image: videoElement });
         await faceDetection.send({ image: videoElement });
       },
-      width: 640, height: 480
+      width: 640,
+      height: 480
     });
     camera.start();
   </script>
