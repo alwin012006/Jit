@@ -2,105 +2,110 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Fresher Bot - Smooth Eyes</title>
-
-  <!-- Pinned stable versions -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/face_detection.js" crossorigin="anonymous"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fresher Bot - Deluxe AI Edition</title>
+  
+  <!-- MediaPipe AI Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #050508;
-      height: 100dvh;
-      width: 100vw;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 11vw;
+      background-color: #050508;
+      margin: 0;
       overflow: hidden;
-      font-family: system-ui, sans-serif;
-    }
-    .eye-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 16px;
+      justify-content: center;
+      height: 100vh;
+      font-family: sans-serif;
     }
-    .eyebrow {
-      width: 140px;
-      height: 12px;
-      background: #00f0ff;
-      border-radius: 6px;
-      box-shadow: 0 0 18px #00f0ff;
-      transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    .eye {
-      width: 155px;
-      height: 190px;
-      background: #00f0ff;
-      border-radius: 80px;
-      position: relative;
-      box-shadow: 0 0 35px #00f0ff;
-      transition: height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    .pupil {
-      width: 52px;
-      height: 52px;
-      background: #050508;
-      border-radius: 50%;
-      position: absolute;
-      top: 69px;
-      left: 51.5px;
-      transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    video { display: none; }
 
-    /* Tiny debug (remove later if you want pure eyes) */
-    #debug {
-      position: fixed;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #00f0ff;
-      font-size: 13px;
-      opacity: 0.7;
-      pointer-events: none;
-      text-align: center;
+    .face {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
     }
+
+    .eyebrows { display: flex; gap: 60px; }
+    .eyebrow {
+      width: 100px; height: 12px; background-color: #00f0ff;
+      border-radius: 6px; transition: all 0.2s ease; box-shadow: 0 0 15px #00f0ff;
+    }
+
+    .eyes { display: flex; gap: 50px; }
+    .eye {
+      width: 130px; height: 170px; background-color: #00f0ff;
+      border-radius: 65px; transition: all 0.15s ease; box-shadow: 0 0 25px #00f0ff;
+      position: relative;
+    }
+
+    .pupil {
+      width: 45px; height: 45px; background-color: #050508;
+      border-radius: 50%; position: absolute; top: 62px; left: 42px;
+      transition: all 0.15s ease;
+    }
+
+    #controls {
+      position: absolute; bottom: 15px; display: flex; gap: 8px; z-index: 10; flex-wrap: wrap; justify-content: center;
+    }
+
+    button {
+      padding: 10px 16px; font-size: 13px; font-weight: bold;
+      color: #000; background-color: #00f0ff; border: none;
+      border-radius: 20px; cursor: pointer;
+    }
+
+    #overlayText {
+      position: absolute; top: 40px; color: #00f0ff; font-size: 24px; font-weight: bold;
+      text-transform: uppercase; letter-spacing: 2px; text-align: center;
+    }
+
+    video { display: none; }
   </style>
 </head>
 <body>
 
-  <div class="eye-container">
-    <div id="leftBrow" class="eyebrow"></div>
-    <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
+  <div id="overlayText">Status: Ready</div>
+
+  <div class="face">
+    <div class="eyebrows">
+      <div id="leftBrow" class="eyebrow"></div>
+      <div id="rightBrow" class="eyebrow"></div>
+    </div>
+    <div class="eyes">
+      <div id="leftEye" class="eye"><div id="leftPupil" class="pupil"></div></div>
+      <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
+    </div>
   </div>
 
-  <div class="eye-container">
-    <div id="rightBrow" class="eyebrow"></div>
-    <div id="rightEye" class="eye"><div id="rightPupil" class="pupil"></div></div>
+  <div id="controls">
+    <button onclick="connectBluetooth()">Connect ESP32</button>
+    <button onclick="toggleMode()" id="modeBtn">Mode: Gesture</button>
+    <button onclick="triggerDance()">Dance Routine 💃</button>
   </div>
 
-  <div id="debug">Looking for hand...</div>
   <video id="webcam" autoplay playsinline></video>
 
   <script>
     let bluetoothDevice, txCharacteristic;
+    let currentMode = 'GESTURE';
+    let hasGreeted = false;
+    let isDancing = false;
     let lastCmd = '';
-    let greetingCooldown = false;
-    let safetyWatchdog = null;
 
-    const leftEye    = document.getElementById('leftEye');
-    const rightEye   = document.getElementById('rightEye');
-    const leftPupil  = document.getElementById('leftPupil');
+    const leftEye = document.getElementById('leftEye');
+    const rightEye = document.getElementById('rightEye');
+    const leftPupil = document.getElementById('leftPupil');
     const rightPupil = document.getElementById('rightPupil');
-    const debugEl    = document.getElementById('debug');
-    const videoElement = document.getElementById('webcam');
+    const leftBrow = document.getElementById('leftBrow');
+    const rightBrow = document.getElementById('rightBrow');
+    const overlayText = document.getElementById('overlayText');
 
-    // ========== Bluetooth (still works in background) ==========
+    // 1. Bluetooth Connection
     async function connectBluetooth() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
@@ -110,167 +115,163 @@
         const server = await bluetoothDevice.gatt.connect();
         const service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
         txCharacteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
-        speak("Connected!");
-        debugEl.textContent = "BT Connected";
-      } catch (e) {
-        console.warn(e);
-        debugEl.textContent = "BT Failed (eyes still work)";
-      }
+        speak("Bluetooth Connected!");
+      } catch (e) { console.log(e); }
     }
-    // Uncomment next line if you want auto-connect on load
-    // connectBluetooth();
 
     function sendCommand(cmd) {
-      clearTimeout(safetyWatchdog);
-
+      if (isDancing) return;
       if (cmd !== lastCmd) {
         if (txCharacteristic) {
-          const encoder = new TextEncoder();
-          txCharacteristic.writeValue(encoder.encode(cmd)).catch(console.warn);
+          let encoder = new TextEncoder();
+          txCharacteristic.writeValue(encoder.encode(cmd));
         }
         setExpression(cmd);
         lastCmd = cmd;
       }
-
-      // Auto-stop after 220ms of no hand
-      if (cmd !== 'S') {
-        safetyWatchdog = setTimeout(() => sendCommand('S'), 220);
-      }
     }
 
+    // 2. Voice Feedback via Phone Speaker
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.0;
-        u.pitch = 1.1;
-        window.speechSynthesis.speak(u);
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
       }
     }
 
+    function toggleMode() {
+      if (currentMode === 'GESTURE') {
+        currentMode = 'FOLLOWER';
+        document.getElementById('modeBtn').innerText = "Mode: Follower";
+        speak("Human Follower Mode");
+      } else {
+        currentMode = 'GESTURE';
+        document.getElementById('modeBtn').innerText = "Mode: Gesture";
+        speak("Gesture Control Mode");
+      }
+    }
+
+    // 3. Feature: Party Dance Routine
+    function triggerDance() {
+      isDancing = true;
+      overlayText.innerText = "PARTY TIME! 💃";
+      speak("Let's dance freshers!");
+      
+      let moves = ['L', 'R', 'L', 'R', 'F', 'S'];
+      let i = 0;
+      let interval = setInterval(() => {
+        if (i < moves.length) {
+          if (txCharacteristic) {
+            let encoder = new TextEncoder();
+            txCharacteristic.writeValue(encoder.encode(moves[i]));
+          }
+          setExpression(moves[i]);
+          i++;
+        } else {
+          clearInterval(interval);
+          isDancing = false;
+          overlayText.innerText = "Status: Ready";
+        }
+      }, 700);
+    }
+
+    // 4. Facial Expressions UI with Winking
     function setExpression(cmd) {
-      // Reset
-      leftEye.style.height  = '190px';
-      rightEye.style.height = '190px';
-      leftPupil.style.transform  = 'none';
-      rightPupil.style.transform = 'none';
+      leftEye.style.height = '170px'; rightEye.style.height = '170px';
+      leftPupil.style.transform = 'none'; rightPupil.style.transform = 'none';
+      leftBrow.style.transform = 'none'; rightBrow.style.transform = 'none';
 
       if (cmd === 'L') {
-        leftPupil.style.transform  = 'translateX(-26px)';
-        rightPupil.style.transform = 'translateX(-26px)';
-        debugEl.textContent = "← LEFT (1 finger)";
-      } 
-      else if (cmd === 'R') {
-        leftPupil.style.transform  = 'translateX(26px)';
-        rightPupil.style.transform = 'translateX(26px)';
-        debugEl.textContent = "RIGHT → (2 fingers)";
-      } 
-      else if (cmd === 'F') {
-        leftEye.style.height  = '145px';
-        rightEye.style.height = '145px';
-        debugEl.textContent = "FORWARD (4+ fingers)";
-      } 
-      else if (cmd === 'B') {
-        leftPupil.style.transform  = 'translateY(-22px)';
-        rightPupil.style.transform = 'translateY(-22px)';
-        debugEl.textContent = "BACK (3 fingers)";
-      } 
-      else {
-        leftPupil.style.transform  = 'translateY(12px)';
-        rightPupil.style.transform = 'translateY(12px)';
-        debugEl.textContent = "STOP / Idle";
+        overlayText.innerText = "Turning Left";
+        leftPupil.style.transform = 'translateX(-25px)';
+        rightPupil.style.transform = 'translateX(-25px)';
+        leftBrow.style.transform = 'rotate(-10deg) translateY(-5px)';
+      } else if (cmd === 'R') {
+        overlayText.innerText = "Turning Right";
+        leftPupil.style.transform = 'translateX(25px)';
+        rightPupil.style.transform = 'translateX(25px)';
+        rightBrow.style.transform = 'rotate(10deg) translateY(-5px)';
+      } else if (cmd === 'F') {
+        overlayText.innerText = "Moving Forward";
+        leftEye.style.height = '140px'; rightEye.style.height = '140px';
+        leftBrow.style.transform = 'translateY(-12px)'; rightBrow.style.transform = 'translateY(-12px)';
+      } else { // STOP / Idle
+        overlayText.innerText = "Idle";
+        leftPupil.style.transform = 'translateY(10px)';
+        rightPupil.style.transform = 'translateY(10px)';
       }
     }
 
-    // ========== Improved finger counting ==========
-    function countOpenFingers(landmarks) {
-      // Index, Middle, Ring, Pinky (tip y < pip y → open)
-      let count = 0;
-      if (landmarks[8].y  < landmarks[6].y)  count++; // Index
-      if (landmarks[12].y < landmarks[10].y) count++; // Middle
-      if (landmarks[16].y < landmarks[14].y) count++; // Ring
-      if (landmarks[20].y < landmarks[18].y) count++; // Pinky
+    // Feature: Idle Blink Loop
+    setInterval(() => {
+      if (lastCmd === 'S' || lastCmd === '') {
+        rightEye.style.height = '10px';
+        setTimeout(() => { rightEye.style.height = '170px'; }, 200);
+      }
+    }, 4000);
 
-      // Thumb (simple & reliable for palm-facing camera)
-      // Tip is significantly farther from wrist than IP joint
-      const wrist = landmarks[0];
-      const thumbTip = landmarks[4];
-      const thumbIp  = landmarks[3];
-      const tipDist = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
-      const ipDist  = Math.hypot(thumbIp.x  - wrist.x, thumbIp.y  - wrist.y);
-      if (tipDist > ipDist * 1.25) count++; // thumb open
-
-      return count;
-    }
+    // 5. MediaPipe Processing
+    const videoElement = document.getElementById('webcam');
 
     function onHandResults(results) {
+      if (currentMode !== 'GESTURE' || isDancing) return;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
-        const open = countOpenFingers(landmarks);
+        let openFingers = 0;
+        if (landmarks[8].y < landmarks[6].y) openFingers++;
+        if (landmarks[12].y < landmarks[10].y) openFingers++;
+        if (landmarks[16].y < landmarks[14].y) openFingers++;
+        if (landmarks[20].y < landmarks[18].y) openFingers++;
 
-        if (open >= 4)      sendCommand('F');
-        else if (open === 3) sendCommand('B');
-        else if (open === 2) sendCommand('R');
-        else if (open === 1) sendCommand('L');
-        else                 sendCommand('S');
+        if (openFingers >= 4) sendCommand('F');
+        else if (openFingers === 0) sendCommand('S');
+        else if (openFingers === 1) sendCommand('L');
+        else if (openFingers === 2) sendCommand('R');
       } else {
         sendCommand('S');
       }
     }
 
     function onFaceResults(results) {
-      if (results.detections && results.detections.length > 0 && !greetingCooldown) {
-        greetingCooldown = true;
-        speak("Welcome to symposium!");
-        setTimeout(() => greetingCooldown = false, 8000);
+      if (isDancing) return;
+      if (results.detections && results.detections.length > 0) {
+        const detection = results.detections[0];
+        const faceCenterX = detection.boundingBox.xCenter;
+
+        if (!hasGreeted) {
+          speak("Welcome to Fresher's Day! Glad to see you!");
+          hasGreeted = true;
+          setTimeout(() => { hasGreeted = false; }, 10000);
+        }
+
+        if (currentMode === 'FOLLOWER') {
+          if (faceCenterX < 0.38) sendCommand('L');
+          else if (faceCenterX > 0.62) sendCommand('R');
+          else sendCommand('F');
+        }
+      } else if (currentMode === 'FOLLOWER') {
+        sendCommand('S');
       }
     }
 
-    // ========== MediaPipe setup ==========
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
-    });
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,          // better accuracy
-      minDetectionConfidence: 0.55,
-      minTrackingConfidence: 0.5,
-      selfieMode: true             // mirrored (more natural)
-    });
+    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
     hands.onResults(onHandResults);
 
-    const faceDetection = new FaceDetection({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`
-    });
-    faceDetection.setOptions({
-      modelSelection: 0,
-      minDetectionConfidence: 0.5
-    });
+    const faceDetection = new FaceDetection({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
+    faceDetection.setOptions({ modelSelection: 0, minDetectionConfidence: 0.5 });
     faceDetection.onResults(onFaceResults);
 
-    // Start camera
     const camera = new Camera(videoElement, {
       onFrame: async () => {
+        await faceDetection.send({ image: videoElement });
         await hands.send({ image: videoElement });
-        // Face detection only every ~8 frames to save CPU
-        if (Math.random() < 0.12) {
-          await faceDetection.send({ image: videoElement });
-        }
       },
-      width: 640,
-      height: 480
+      width: 640, height: 480
     });
-
-    camera.start()
-      .then(() => {
-        debugEl.textContent = "Camera ready – show hand";
-        console.log("Camera + Hands started successfully");
-      })
-      .catch(err => {
-        console.error(err);
-        debugEl.textContent = "Camera permission denied or not HTTPS";
-        alert("Please allow camera access and open this page via https:// or localhost");
-      });
+    camera.start();
   </script>
 </body>
 </html>
